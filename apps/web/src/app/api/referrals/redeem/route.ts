@@ -1,0 +1,8 @@
+import { z } from 'zod';
+import { redemptionInput } from '@trusteo/core/referrals';
+import { db } from '@/lib/db';
+import { requireUser } from '@/lib/auth';
+import { apiError,guardMutation,jsonBody,HttpError,rateLimit } from '@/lib/security';
+export async function POST(request:Request){try{guardMutation(request);const user=await requireUser();await rateLimit(`redemption:${user.id}`,30,3600);const input=redemptionInput.parse(await jsonBody(request));const result=await db.promotionRedemption.updateMany({where:{code:input.code,userId:user.id,redeemedAt:null,expiresAt:{gt:new Date()},purchaseReference:{not:input.purchaseReference}},data:{redeemedAt:new Date(),redeemedPurchaseReference:input.purchaseReference}});if(!result.count)throw new HttpError(409,'Code invalide, expiré, déjà utilisé ou achat initial réutilisé.');return Response.json({discountPercent:10,redeemed:true});}catch(e){return apiError(e);}}
+// Mark a referral converted only after a purchase attested by the merchant.
+export async function PUT(request:Request){try{guardMutation(request);const user=await requireUser();await rateLimit(`referral-conversion:${user.id}`,30,3600);const input=z.object({code:z.string().min(16).max(128),purchaseReference:z.string().trim().min(3).max(120),purchaseVerified:z.literal(true)}).parse(await jsonBody(request));const result=await db.referral.updateMany({where:{code:input.code,userId:user.id,convertedAt:null},data:{convertedAt:new Date(),purchaseReference:input.purchaseReference}});if(!result.count)throw new HttpError(409,'Parrainage invalide ou déjà validé.');return Response.json({converted:true});}catch(e){return apiError(e);}}

@@ -1,0 +1,6 @@
+import { campaignInput } from '@trusteo/core/campaigns';
+import { db } from '@/lib/db';
+import { requireUser } from '@/lib/auth';
+import { apiError,guardMutation,jsonBody,HttpError,rateLimit } from '@/lib/security';
+export async function GET(){try{const user=await requireUser();const [campaigns,contacts]=await Promise.all([db.campaign.findMany({where:{userId:user.id},include:{_count:{select:{recipients:true}}},orderBy:{createdAt:'desc'}}),db.contact.findMany({where:{userId:user.id},orderBy:{name:'asc'},take:5000})]);return Response.json({campaigns,contacts});}catch(e){return apiError(e);}}
+export async function POST(request:Request){try{guardMutation(request);const user=await requireUser();await rateLimit(`campaign-create:${user.id}`,20,3600);const input=campaignInput.parse(await jsonBody(request));const location=await db.location.findFirst({where:{id:input.locationId,userId:user.id}});if(!location)throw new HttpError(404,'Établissement introuvable.');if(!location.reviewUrl)throw new HttpError(400,'Ajoutez le lien de dépôt d’avis à cet établissement.');const campaign=await db.campaign.create({data:{...input,userId:user.id,offer:null}});return Response.json({campaign},{status:201});}catch(e){return apiError(e);}}
