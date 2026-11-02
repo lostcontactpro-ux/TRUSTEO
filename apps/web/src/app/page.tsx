@@ -1,0 +1,2 @@
+import Link from 'next/link';
+export default function Home(){return <main id="main" className="mx-auto max-w-5xl px-6 py-20"><img src="/logo.svg" width="180" height="48" alt="Trusteo"/><h1 className="mt-16 text-5xl font-bold">Votre réputation, votre force.</h1><p className="mt-6 text-xl">Prenez soin de vos clients. Trusteo prend soin de vos avis.</p><Link href="/app" className="mt-8 inline-flex min-h-11 items-center rounded-xl bg-green px-6 font-semibold text-navy">Découvrir mon espace</Link></main>}

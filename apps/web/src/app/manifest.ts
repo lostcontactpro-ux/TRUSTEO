@@ -1,0 +1,2 @@
+import type {MetadataRoute} from 'next';
+export default function manifest():MetadataRoute.Manifest{return {name:'Trusteo — Votre réputation, votre force',short_name:'Trusteo',description:'Gérez vos avis et vos relations clients.',start_url:'/app',scope:'/',display:'standalone',background_color:'#F8F7F4',theme_color:'#1A1A2E',lang:'fr',icons:[{src:'/favicon.svg',sizes:'any',type:'image/svg+xml',purpose:'any'}]}}
