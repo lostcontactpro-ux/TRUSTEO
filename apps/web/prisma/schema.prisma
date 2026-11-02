@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  engineType = "client"
 }
 
 datasource db {
@@ -207,6 +208,7 @@ model CampaignRecipient {
   contactId  String
   status     String   @default("pending")
   sentAt     DateTime?
+  deliveryStartedAt DateTime?
   error      String?
   campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   contact    Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
@@ -256,6 +258,10 @@ model WebhookEvent {
 model Notification {
   id        String    @id @default(cuid())
   userId    String
+  reviewId  String? @unique
+  emailSentAt DateTime?
+  pushSentAt DateTime?
+  emailAttemptedAt DateTime?
   title     String
   body      String
   url       String?
