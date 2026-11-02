@@ -1,0 +1,2 @@
+import { cookies } from 'next/headers';import{z}from'zod';import{guardMutation,apiError,jsonBody}from '@/lib/security';
+export async function POST(request:Request){try{guardMutation(request);const{locale}=z.object({locale:z.enum(['fr','en'])}).parse(await jsonBody(request));(await cookies()).set('locale',locale,{sameSite:'lax',httpOnly:true,secure:process.env.NODE_ENV==='production',path:'/',maxAge:31536000});return Response.json({ok:true})}catch(e){return apiError(e)}}

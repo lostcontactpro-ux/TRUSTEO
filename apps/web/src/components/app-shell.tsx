@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation';
 import { Home, MessageSquare, Send, Store, UserRound, Plug, Gift, ArrowUpRight, LogOut, Star } from 'lucide-react';
 import { api, json } from '@/lib/client';
 import { useCopy } from './locale-copy';
+import { LocaleSwitch } from './locale-switch';
 const nav = [
   {href:'/app',fr:'Accueil',en:'Overview',icon:Home},
   {href:'/app/reviews',fr:'Avis',en:'Reviews',icon:MessageSquare},
@@ -29,7 +30,7 @@ export function AppShell({children,name}:{children:React.ReactNode,name:string})
     <header className="border-b border-border bg-white/95 px-5 py-4 sm:px-8"><div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
       <Link href="/app" className="lg:hidden"><img src="/logo.svg" width="135" height="36" alt="Trusteo"/></Link>
       <span className="hidden text-sm text-[#666673] lg:block">{t('Chaque expérience mérite une réponse.','Every experience deserves a response.')}</span>
-      <div className="flex items-center gap-3"><span className="hidden text-sm font-semibold sm:block">{name}</span><Link href="/app/settings" aria-label={t('Mon profil','My profile')} className="flex h-11 w-11 items-center justify-center rounded-full bg-[#f3e5ce] font-bold text-navy">{name.charAt(0).toUpperCase()}</Link><button title={t('Se déconnecter','Sign out')} aria-label={t('Se déconnecter','Sign out')} className="flex h-11 w-11 items-center justify-center rounded-xl hover:bg-stone" onClick={async()=>{await api('/api/auth/logout',json('POST'));location.href='/login'}}><LogOut size={18}/></button></div>
+      <div className="flex items-center gap-2 sm:gap-3"><LocaleSwitch/><span className="hidden text-sm font-semibold sm:block">{name}</span><Link href="/app/settings" aria-label={t('Mon profil','My profile')} className="flex h-11 w-11 items-center justify-center rounded-full bg-[#f3e5ce] font-bold text-navy">{name.charAt(0).toUpperCase()}</Link><button title={t('Se déconnecter','Sign out')} aria-label={t('Se déconnecter','Sign out')} className="flex h-11 w-11 items-center justify-center rounded-xl hover:bg-stone" onClick={async()=>{await api('/api/auth/logout',json('POST'));location.href='/login'}}><LogOut size={18}/></button></div>
     </div></header>
     <main id="main" className="mx-auto max-w-6xl px-4 pb-28 pt-7 sm:px-8 sm:pt-10 lg:pb-12">{children}</main>
     <nav aria-label={t('Navigation mobile','Mobile navigation')} className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-border bg-white pb-[env(safe-area-inset-bottom)] lg:hidden">{nav.map(({href,fr,en,icon:Icon})=><Link key={href} href={href} aria-current={active(href)?'page':undefined} className={`flex min-h-[70px] flex-col items-center justify-center gap-1 px-1 text-center text-[10px] font-semibold ${active(href)?'text-navy':'text-[#686874]'}`}><span className={`rounded-xl px-3 py-1 ${active(href)?'bg-[#f3e5ce]':''}`}><Icon size={20}/></span><span>{t(fr,en)}</span></Link>)}</nav>
