@@ -1,0 +1,2 @@
+import Link from 'next/link';
+export default function AuthLayout({children}:{children:React.ReactNode}) {return <div className="min-h-screen"><header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6"><Link href="/" aria-label="Trusteo"><img src="/logo.svg" width="160" height="43" alt="Trusteo"/></Link><Link href="/contact" className="flex min-h-11 items-center text-sm underline underline-offset-4">Contact</Link></header><main id="main" className="mx-auto flex max-w-6xl justify-center px-5 pb-16 pt-6 sm:pt-12">{children}</main></div>}
