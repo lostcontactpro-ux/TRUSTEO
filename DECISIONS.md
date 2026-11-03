@@ -21,3 +21,5 @@
 
 - Renouvellement OAuth : verrou de ligne PostgreSQL partagé entre le web et le worker, relecture des jetons sous verrou et conservation des identifiants de ressource validés.
 - Outillage : Prisma CLI est une dépendance de développement à la racine du monorepo ; override deepmerge-ts 8 pour corriger son avis de sécurité, validé par génération et build. Vitest 5 remplace la version initiale vulnérable.
+
+- Connexions SaaS : l'exploitant enregistre l'application OAuth Trusteo une seule fois. Chaque entreprise cliente autorise ses propres comptes Google/Trustpilot depuis son interface ; aucun compte de commerçant partagé ni collecte de mots de passe. Les autorisations et jetons sont isolés par connexion et établissement du client.

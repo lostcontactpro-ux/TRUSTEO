@@ -54,7 +54,15 @@ L'inscription, les sessions, le compte, les préférences et l'export/suppressio
 
 Le mode assisté copie une réponse puis ouvre la plateforme ; il ne prétend pas publier. Google Business Profile et Trustpilot ont des transports API officiels testés avec des réponses HTTP simulées. Les autres plateformes utilisent les capacités, l'email ou le mode assisté documentés dans [docs/providers.md](docs/providers.md). Les autorisations API des plateformes restent à obtenir.
 
-## Configuration à fournir
+## Qui connecte Google et Trustpilot ?
+
+Chaque entreprise cliente connecte **son propre compte** depuis son espace Trusteo : Connexions → choisir un établissement → Connecter Google ou Trustpilot → se connecter sur la plateforme → autoriser Trusteo → sélectionner la fiche concernée. Le client ne fournit jamais son mot de passe à Trusteo. Ses connexions, avis et jetons d'autorisation chiffrés sont rattachés à son compte et à ses établissements.
+
+L'exploitant de Trusteo configure une seule fois **l'application d'intégration** : projet/consentement OAuth et accès API Google, application et accès API Trustpilot, identifiants OAuth de Trusteo et URL de retour. Ces identifiants identifient le logiciel ; ils ne remplacent pas l'autorisation des commerces et ne sont pas les identifiants de connexion des clients. Aucun compte de commerçant global ne sert à lire les avis de tous les utilisateurs.
+
+Les droits de gestion d'une fiche Google et, pour Trustpilot, les droits et conditions d'accès API du compte connecté restent nécessaires. Une intégration OAuth enregistrée ne garantit pas un accès API pour toute offre Trustpilot.
+
+## Configuration à fournir pour l’application Trusteo
 
 Le détail des variables est dans [.env.example](.env.example). Conservez les secrets dans les variables du fournisseur d'hébergement, jamais dans Git ni dans le navigateur.
 
@@ -64,8 +72,8 @@ Le détail des variables est dans [.env.example](.env.example). Conservez les se
 | Chiffrement | `CREDENTIAL_ENCRYPTION_KEY` : 32 octets aléatoires encodés en 64 caractères hexadécimaux ; sauvegarder durablement |
 | Stripe | Clé secrète, secret webhook, quatre IDs de prix, Customer Portal activé ; coupon d'introduction facultatif car création automatique possible |
 | OpenAI | `OPENAI_API_KEY`, ou `TRUSTEO_OPENAI_API_KEY` pour une liaison proxy cloud, et modèle `OPENAI_MODEL` autorisé pour votre projet |
-| Google | Projet Google Cloud, accès Business Profile approuvé, consentement OAuth, `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` |
-| Trustpilot | Application Business API et droits de lecture/réponse, `TRUSTPILOT_CLIENT_ID` / `TRUSTPILOT_CLIENT_SECRET` |
+| Google | Application Trusteo : projet Google Cloud, accès Business Profile approuvé, consentement OAuth, `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`. Chaque client autorise ensuite son propre compte. |
+| Trustpilot | Application Trusteo : accès Business API et `TRUSTPILOT_CLIENT_ID` / `TRUSTPILOT_CLIENT_SECRET`. Chaque client autorise son compte Business avec les droits API requis. |
 | Resend | `RESEND_API_KEY`, domaine expéditeur vérifié SPF/DKIM, `EMAIL_FROM`, adresse de réception `CONTACT_EMAIL`, politique DMARC |
 | Emails entrants | Sous-domaine `INBOUND_EMAIL_DOMAIN`, routage entrant et passerelle vérifiant DKIM/ARC ; secret `INBOUND_WEBHOOK_SECRET` partagé avec cette passerelle |
 | Push | Clés VAPID ; même clé publique dans `VAPID_PUBLIC_KEY` et `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, plus clé privée et sujet |
@@ -88,7 +96,7 @@ Enregistrez l'endpoint HTTPS `/api/billing/webhook` avec les événements `custo
 
 ### OAuth, email et push
 
-Pour Google et Trustpilot, l'URL de retour est **`APP_URL/api/connections/oauth/callback`**, à déclarer exactement dans chaque console. Renseignez aussi l'ID de compte/établissement Google ou Business Unit Trustpilot dans l'écran Connexions. Renouvellement de jetons et stockage AES-256-GCM sont intégrés ; une rotation de clé de chiffrement sans migration exige de reconnecter les comptes.
+Pour Google et Trustpilot, l'URL de retour est **`APP_URL/api/connections/oauth/callback`**, à déclarer exactement dans chaque console. Chaque client sélectionne ses propres comptes et fiches Google ou renseigne son Business Unit Trustpilot dans son écran Connexions après autorisation OAuth. Renouvellement de jetons et stockage AES-256-GCM sont intégrés ; une rotation de clé de chiffrement sans migration exige de reconnecter les comptes.
 
 L'email entrant requiert une passerelle dédiée ; ce n'est pas un webhook Resend natif. La passerelle authentifie l'expéditeur d'origine avant de signer le JSON attendu. Format, signature et limites : [docs/providers.md](docs/providers.md). Un simple transfert de mail non authentifié n'est pas accepté.
 
