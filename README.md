@@ -132,6 +132,10 @@ npm start
 
 Les tests Playwright lancent un serveur sur le port 3100 et contrôlent le rendu à 375 px. Les API externes sont désactivées dans ces tests navigateur. Les tests d'intégration HTTP simulés ne valident pas un débit bancaire, un vrai envoi ni une publication sur une plateforme. Consultez le [rapport de validation](docs/validation.md) et [docs/security-audit.md](docs/security-audit.md) pour les validations exécutées et les limites restantes. La construction Docker web et worker, un contrôle HTTP du web standalone et un job BullMQ réel contre PostgreSQL/Redis ont été vérifiés lors de la préparation initiale ; les relances sur la dernière révision sont distinguées dans le rapport de livraison. Aucun score Lighthouse ou audit WCAG exhaustif n'est présumé.
 
+## Site public Lovable
+
+Le site public est `https://trus-teo.lovable.app`. Le [guide Lovable et Stripe](docs/lovable-stripe.md) explique comment le relier à cette application Next.js après déploiement, où placer les clés serveur et quels IDs de tarifs fournir. Aucune liaison ou publication n’est présumée effectuée.
+
 ## Migrations et déploiement
 
 `npm run db:migrate` exécute [scripts/migrate.mjs](scripts/migrate.mjs) : migrations SQL versionnées, transaction PostgreSQL, verrou consultatif et registre SHA-256. Ne modifiez jamais une migration appliquée. N'utilisez pas `prisma migrate deploy` en parallèle : son registre est différent. Cette solution contourne un défaut constaté d'introspection du moteur WASM Prisma (`name` PostgreSQL non pris en charge), sans désactiver une vérification TLS ou de signature. Prisma Client utilise son adaptateur PostgreSQL JavaScript, sans moteur de requêtes natif.
