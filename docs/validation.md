@@ -53,3 +53,13 @@ Le 3 novembre 2026, le parcours `/app/connections` a été complété avec test 
 - Le test visuel de connexion utilise des réponses de plateforme simulées. Les tests API réels refusent les jetons invalides et l'accès d'un autre propriétaire. Aucun consentement Google/Trustpilot réel ni publication d'avis n'est revendiqué.
 
 Voir [Connecter mon entreprise](connect-my-business.md) et [portée des tests](testing-business-connection.md). Cette évolution n'a pas été publiée sur Lovable.
+
+## Préparation de la liaison Lovable et publication du code
+
+Le 3 novembre 2026, la branche `codex/trusteo-lovable-integration` a été envoyée sur le dépôt GitHub `lostcontactpro-ux/TRUSTEO`. Le constat « aucun push » du point initial décrit l'état avant cette étape. Aucune application Vercel n'a encore été déployée et aucun bouton du site Lovable n'a été modifié.
+
+Cette préparation ajoute la configuration Vercel du monorepo et un générateur de destinations/prompt Lovable utilisant une véritable origine HTTPS fournie par l'opérateur. Aucun domaine d'application déployée n'a été inventé.
+
+Le traçage du compilateur WASM Prisma a été corrigé : il était absent du standalone initial, que les anciens contrôles publics/401 ne sollicitaient pas. Les routes compte, inscription et aperçu incluent maintenant ce fichier dans leur trace. `npm run test:standalone` a vérifié une copie de production hors du dépôt, avec inscription réelle, cookie Secure/HttpOnly et lecture du profil depuis PostgreSQL local ; le seul compte de test a été supprimé.
+
+Le typecheck, les 182 tests unitaires et le build passent. La configuration Vercel et le générateur de liens ne constituent pas une liaison effective : restent nécessaires l'autorisation d'hébergement, les services managés et l'accès au projet Lovable, puis un contrôle des boutons sur les domaines réellement déployés.
