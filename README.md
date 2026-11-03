@@ -54,6 +54,10 @@ L'inscription, les sessions, le compte, les préférences et l'export/suppressio
 
 Le mode assisté copie une réponse puis ouvre la plateforme ; il ne prétend pas publier. Google Business Profile et Trustpilot ont des transports API officiels testés avec des réponses HTTP simulées. Les autres plateformes utilisent les capacités, l'email ou le mode assisté documentés dans [docs/providers.md](docs/providers.md). Les autorisations API des plateformes restent à obtenir.
 
+## Connecter mon entreprise
+
+Le [parcours de connexion](docs/connect-my-business.md) ajoute un aperçu réel, un test en lecture seule et une confirmation explicite avant activation. Il se trouve dans `/app/connections`. Google exige OAuth ; une clé Trustpilot propose une lecture seule sans preuve de gestion.
+
 ## Qui connecte Google et Trustpilot ?
 
 Chaque entreprise cliente connecte **son propre compte** depuis son espace Trusteo : Connexions → choisir un établissement → Connecter Google ou Trustpilot → se connecter sur la plateforme → autoriser Trusteo → sélectionner la fiche concernée. Le client ne fournit jamais son mot de passe à Trusteo. Ses connexions, avis et jetons d'autorisation chiffrés sont rattachés à son compte et à ses établissements.

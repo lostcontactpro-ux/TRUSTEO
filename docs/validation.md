@@ -41,3 +41,15 @@ Les autres plateformes exposent leurs modes email et assisté ; aucune API parte
 ## Historique et publication
 
 Les dix étapes sont enregistrées dans des commits locaux. Aucun push GitHub ni déploiement Vercel n’a été effectué. La restauration de cet historique local dans une nouvelle tâche cloud n’a pas été vérifiée ; un bundle Git est fourni dans `/workspace/shared/trusteo-2026-11-03.bundle` pour conserver les sources et leur historique indépendamment du checkout.
+
+## Évolution : Connecter mon entreprise
+
+Le 3 novembre 2026, le parcours `/app/connections` a été complété avec test en lecture seule, aperçu de fiche/avis et confirmation explicite. Les checks de cette évolution sont distincts de la validation initiale ci-dessus :
+
+- 136 tests unitaires passent dans 19 fichiers ; les 6 tests du webhook Stripe restent passants.
+- 11 scénarios Playwright à 375 px passent, dont 3 nouveaux pour l'aperçu, le consentement, l'expiration et l'isolation de compte.
+- TypeScript web/worker et le build de production passent.
+- La nouvelle migration a été appliquée puis réexécutée sans changement. Le dispatcher réel PostgreSQL/Redis a supprimé un aperçu expiré de test en conservant l'entreprise inactive ; ses données de test ont été supprimées par identifiant.
+- Le test visuel de connexion utilise des réponses de plateforme simulées. Les tests API réels refusent les jetons invalides et l'accès d'un autre propriétaire. Aucun consentement Google/Trustpilot réel ni publication d'avis n'est revendiqué.
+
+Voir [Connecter mon entreprise](connect-my-business.md) et [portée des tests](testing-business-connection.md). Cette évolution n'a pas été publiée sur Lovable.

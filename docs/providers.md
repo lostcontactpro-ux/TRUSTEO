@@ -11,6 +11,10 @@ Les identifiants `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` et `TRUSTPILOT_CLIENT
 
 La disponibilité des API reste soumise aux validations et contrats des plateformes, notamment pour Trustpilot. Déconnecter une connexion locale ne révoque pas automatiquement les autorisations dans le compte Google/Trustpilot : le client peut également les retirer dans les réglages de la plateforme.
 
+## Aperçu et confirmation
+
+Les connexions API sont préparées puis testées via `previewBusiness()` avant toute activation. Le client vérifie le vrai profil et jusqu’à trois avis, puis accepte explicitement l’association. Le reçu expire après dix minutes et ne peut être consommé qu’une fois. Un identifiant Google seul ne donne aucun accès ; Google utilise OAuth. Trustpilot accepte également une clé API publique pour la lecture seule, sans droit de publication ni vérification de gestion. Consulter [Connecter mon entreprise](connect-my-business.md).
+
 ## Contrat et modes
 
 Chaque plateforme dispose de son fichier dans `packages/core/src/providers`. Le registre central expose les adaptateurs avec le même contrat `ReviewProvider` : `connect()`, `fetchReviews(since)`, `reply(reviewId, text)` et `capabilities`.

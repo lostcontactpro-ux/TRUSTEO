@@ -23,3 +23,7 @@
 - Outillage : Prisma CLI est une dépendance de développement à la racine du monorepo ; override deepmerge-ts 8 pour corriger son avis de sécurité, validé par génération et build. Vitest 5 remplace la version initiale vulnérable.
 
 - Connexions SaaS : l'exploitant enregistre l'application OAuth Trusteo une seule fois. Chaque entreprise cliente autorise ses propres comptes Google/Trustpilot depuis son interface ; aucun compte de commerçant partagé ni collecte de mots de passe. Les autorisations et jetons sont isolés par connexion et établissement du client.
+
+- Connecter mon entreprise : un identifiant de fiche n'est jamais une autorisation. Google utilise OAuth ; les clés API sont proposées uniquement pour les transports qui les prennent en charge (Trustpilot en lecture seule).
+- Activation : test de fiche et d'avis en lecture seule, aperçu réel limité à trois avis, attestation explicite et reçu serveur chiffré à usage unique valable dix minutes. Le test ne publie rien et ne valide pas artificiellement l'IA ou les notifications. Une clé publique ne prouve pas la gestion de l'entreprise.
+- Les anciennes connexions API doivent être confirmées avant reprise du polling et de la publication. Une connexion active testée à nouveau conserve ses paramètres jusqu'à validation ; une nouvelle autorisation OAuth exige un nouvel aperçu.
