@@ -1,10 +1,11 @@
+import { requireEntitlement } from '@/lib/entitlements';
 import { db } from '@/lib/db';
 import { requireUser } from '@/lib/auth';
 import { appUrl } from '@/lib/env';
 import { apiError, HttpError, rateLimit } from '@/lib/security';
-import { checkProviderSubscription, consumeProviderOAuth, makeProvider, ownedConnection, providerApiError } from '@/lib/providers';
+import { consumeProviderOAuth, makeProvider, ownedConnection, providerApiError } from '@/lib/providers';
 export async function GET(request:Request){try{
-  const user=await requireUser();checkProviderSubscription(user.subscription);await rateLimit(`oauth-callback:${user.id}`,10);
+  const user=await requireUser();await requireEntitlement(user);await rateLimit(`oauth-callback:${user.id}`,10);
   const url=new URL(request.url);const state=url.searchParams.get('state');
   if(!state||state.length!==64)throw new HttpError(403,'État OAuth invalide.');
   const data=await consumeProviderOAuth(state,user.id);

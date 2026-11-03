@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { amountFor, assertLocationCapacity, canAddLocation, isEntitled, locationLimit, pricing } from './pricing';
+import { amountFor, assertLocationCapacity, canAddLocation, canOperateLocations, isEntitled, locationLimit, pricing } from './pricing';
 const now = new Date('2026-01-01T00:00:00Z');
 const active = { plan: 'essential', status: 'active', currentPeriodEnd: new Date('2026-02-01') };
 describe('pricing and server entitlements', () => {
@@ -24,6 +24,15 @@ describe('pricing and server entitlements', () => {
     expect(isEntitled({ ...active, currentPeriodEnd: now }, now)).toBe(false);
     expect(locationLimit(null, now)).toBe(0);
     expect(isEntitled({ ...active, currentPeriodEnd: null }, now)).toBe(false);
+  });
+  it('blocks billable operations after downgrade until excess locations are removed', () => {
+    expect(canOperateLocations(active, 3, now)).toBe(true);
+    expect(canOperateLocations(active, 4, now)).toBe(false);
+    expect(canOperateLocations({ ...active, plan: 'pro' }, 20, now)).toBe(true);
+    expect(canOperateLocations({ ...active, plan: 'pro' }, 21, now)).toBe(false);
+    expect(canOperateLocations({ ...active, plan: 'unknown' }, 0, now)).toBe(false);
+    expect(canOperateLocations({ ...active, status: 'past_due' }, 1, now)).toBe(false);
+    expect(canOperateLocations(active, -1, now)).toBe(false);
   });
   it('validates trial expiration independently of paid period', () => {
     expect(isEntitled({ ...active, status: 'trialing', trialEndsAt: new Date('2026-01-15') }, now)).toBe(true);

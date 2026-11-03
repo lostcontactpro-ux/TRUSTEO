@@ -1,8 +1,9 @@
+import { requireEntitlement } from '@/lib/entitlements';
 import { z } from 'zod';
 import { isProviderUrl, parseNotificationEmail, platformIds } from '@trusteo/core/providers/index';
 import { db } from '@/lib/db';
 import { apiError, HttpError, rateLimit } from '@/lib/security';
-import { checkProviderSubscription, enqueueInboundReviewNotification, providerApiError } from '@/lib/providers';
+import { enqueueInboundReviewNotification, providerApiError } from '@/lib/providers';
 import { validGatewaySignature } from './signature';
 
 const schema=z.object({
@@ -23,7 +24,7 @@ export async function POST(request:Request){try{
   if(domain!==process.env.INBOUND_EMAIL_DOMAIN.toLowerCase()||!/^[a-f0-9]{64}$/.test(alias))throw new HttpError(404,'Adresse entrante inconnue.');
   const connection=await db.providerConnection.findUnique({where:{inboxToken:alias},include:{location:{include:{user:{include:{subscription:true}}}}}});
   if(!connection||connection.mode!=='email')throw new HttpError(404,'Connexion email inconnue.');
-  checkProviderSubscription(connection.location.user.subscription);await rateLimit(`inbound-email:${connection.id}`,60);
+  await requireEntitlement(connection.location.user);await rateLimit(`inbound-email:${connection.id}`,60);
   const platform=z.enum(platformIds).parse(connection.platform);
   if(!isProviderUrl(platform,`https://${input.authentication.originalSenderDomain}/`))throw new HttpError(403,'Expéditeur original incompatible avec la plateforme.');
   const review=parseNotificationEmail(platform,connection.locationId,input);

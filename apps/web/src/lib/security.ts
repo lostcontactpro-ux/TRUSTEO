@@ -46,9 +46,23 @@ export async function rateLimit(key: string, limit = 20, windowSec = 60): Promis
 export async function jsonBody(request: Request): Promise<unknown> {
   const length = Number(request.headers.get('content-length') ?? 0);
   if (length > 1_000_000) throw new HttpError(413, 'Requête trop volumineuse.');
-  const text = await request.text();
-  if (Buffer.byteLength(text) > 1_000_000) throw new HttpError(413, 'Requête trop volumineuse.');
-  try { return JSON.parse(text); } catch { throw new HttpError(400, 'JSON invalide.'); }
+  const reader = request.body?.getReader();
+  if (!reader) throw new HttpError(400, 'JSON invalide.');
+  const chunks: Uint8Array[] = []; let bytes = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > 1_000_000) {
+        await reader.cancel();
+        throw new HttpError(413, 'Requête trop volumineuse.');
+      }
+      chunks.push(value);
+    }
+  } finally { reader.releaseLock(); }
+  try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); }
+  catch { throw new HttpError(400, 'JSON invalide.'); }
 }
 
 export function apiError(error: unknown): Response {

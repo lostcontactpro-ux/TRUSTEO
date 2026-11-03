@@ -1,6 +1,43 @@
 {
-  "name":"trusteo", "version":"0.1.0", "private":true,
-  "workspaces":["apps/*","packages/*"],"engines":{"node":">=22"},
-  "scripts":{"dev":"npm run dev -w @trusteo/web","build":"npm run build -w @trusteo/web","start":"npm run start -w @trusteo/web","worker":"npm run start -w @trusteo/worker","test":"vitest run","test:e2e":"playwright test","typecheck":"tsc --noEmit -p apps/web/tsconfig.json && tsc --noEmit -p apps/worker/tsconfig.json","db:generate":"npm run db:generate -w @trusteo/web","db:push":"npm run db:push -w @trusteo/web","db:migrate":"npm run db:migrate -w @trusteo/web"},
-  "devDependencies":{"@playwright/test":"^1.58.2","@types/node":"^22.19.0","@types/react":"^19.2.0","@types/react-dom":"^19.2.0","typescript":"^5.9.3","vitest":"^3.2.4","tsx":"^4.21.0"}
+  "name": "trusteo",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "npm run dev -w @trusteo/web",
+    "build": "npm run build -w @trusteo/web",
+    "start": "npm run start -w @trusteo/web",
+    "worker": "npm run start -w @trusteo/worker",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "typecheck": "tsc --noEmit -p apps/web/tsconfig.json && tsc --noEmit -p apps/worker/tsconfig.json",
+    "db:generate": "npm run db:generate -w @trusteo/web",
+    "db:push": "npm run db:push -w @trusteo/web",
+    "db:migrate": "node --env-file=.env scripts/migrate.mjs",
+    "providers:generate": "node packages/core/src/providers/generate-registry.mjs",
+    "predev": "npm run providers:generate",
+    "prebuild": "npm run providers:generate"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@types/node": "^22.19.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.5",
+    "prisma": "6.19.3"
+  },
+  "dependencies": {
+    "pg": "^8.20.0"
+  },
+  "overrides": {
+    "deepmerge-ts": "^8.0.0"
+  }
 }

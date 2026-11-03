@@ -39,5 +39,6 @@ describe('bounded JSON inputs', () => {
   it('rejects malformed and oversized payloads', async () => {
     await expect(jsonBody(new Request('http://localhost', { method: 'POST', body: 'oops' }))).rejects.toMatchObject({ status: 400 });
     await expect(jsonBody(new Request('http://localhost', { method: 'POST', headers: { 'content-length': '1000001' }, body: '{}' }))).rejects.toMatchObject({ status: 413 });
+    await expect(jsonBody(new Request('http://localhost', { method: 'POST', body: 'x'.repeat(1_000_001) }))).rejects.toMatchObject({ status: 413 });
   });
 });

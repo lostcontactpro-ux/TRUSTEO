@@ -4,7 +4,7 @@ import { Resend } from 'resend';
 import webpush from 'web-push';
 import { createProvider, ProviderError, type ProviderCredentials } from '@trusteo/core/providers/index';
 import { decryptCredentials, encryptCredentials } from '@trusteo/core/crypto';
-import { isEntitled } from '@trusteo/core/pricing';
+import { isEntitled, canOperateLocations } from '@trusteo/core/pricing';
 import { campaignInput, eligibleContact, renderInvitation } from '@trusteo/core/campaigns';
 import { db, deliveryQueue, jobOptions, notificationQueue, redis, syncQueue } from './runtime';
 import { escapedHtml, insideIdempotencyWindow, reviewFields, reviewNotification, safeFailure, safePushEndpoint } from './policy';
@@ -13,6 +13,11 @@ function origin() {
   const url = new URL(process.env.APP_URL ?? 'http://localhost:3000');
   if (process.env.NODE_ENV === 'production' && url.protocol !== 'https:') throw new UnrecoverableError('APP_URL must use HTTPS.');
   return url.origin;
+}
+async function hasLocationCapacity(user:{id:string;subscription:Parameters<typeof isEntitled>[0]}) {
+  if(!isEntitled(user.subscription))return false;
+  const count=await db.location.count({where:{userId:user.id}});
+  return canOperateLocations(user.subscription,count);
 }
 function mailReady() { return Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM); }
 function pushReady() { return Boolean(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY && process.env.VAPID_SUBJECT); }
@@ -30,7 +35,9 @@ async function sendEmail(input: { to: string; subject: string; text: string; key
 export async function dispatch() {
   const connections = await db.providerConnection.findMany({ where: { status: 'connected', mode: 'api' }, include: { location: { include: { user: { include: { subscription: true } } } } } });
   const bucket = Math.floor(Date.now() / 600_000);
-  await syncQueue.addBulk(connections.filter(c => isEntitled(c.location.user.subscription)).map(c => ({ name: 'sync-connection', data: { connectionId: c.id }, opts: { ...jobOptions, backoff: { type: 'provider', delay: 10000 }, jobId: `sync-${c.id}-${bucket}` } })));
+  const capacity=new Map<string,boolean>();
+  for(const connection of connections){const user=connection.location.user;if(!capacity.has(user.id))capacity.set(user.id,await hasLocationCapacity(user));}
+  await syncQueue.addBulk(connections.filter(c => capacity.get(c.location.userId)).map(c => ({ name: 'sync-connection', data: { connectionId: c.id }, opts: { ...jobOptions, backoff: { type: 'provider', delay: 10000 }, jobId: `sync-${c.id}-${bucket}` } })));
   // Notification is the transactional outbox; the queue can be rebuilt after Redis loss.
   const notifications = await db.notification.findMany({ where: { reviewId: { not: null }, OR: [{ emailSentAt: null }, { pushSentAt: null }] }, include: { user: true } });
   const pending = notifications.filter(n => (n.user.notifyEmail && !n.emailSentAt && mailReady() && (!n.emailAttemptedAt || insideIdempotencyWindow(n.emailAttemptedAt))) || (n.user.notifyPush && !n.pushSentAt && pushReady()));
@@ -61,7 +68,7 @@ export async function syncConnection(connectionId: string) {
   let logId: string | undefined;
   try {
     const connection = await db.providerConnection.findUnique({ where: { id: connectionId }, include: { location: { include: { user: { include: { subscription: true } } } } } });
-    if (!connection || connection.mode !== 'api' || connection.status !== 'connected' || !isEntitled(connection.location.user.subscription)) return;
+    if (!connection || connection.mode !== 'api' || connection.status !== 'connected' || !await hasLocationCapacity(connection.location.user)) return;
     logId = (await db.syncLog.create({ data: { connectionId, status: 'running' } })).id;
     if (!connection.credentials) throw new ProviderError('Encrypted credentials are required.', 'configuration');
     const credentials = decryptCredentials<ProviderCredentials>(connection.credentials);
@@ -69,7 +76,25 @@ export async function syncConnection(connectionId: string) {
     const provider = createProvider(connection.platform, {
       locationId: connection.locationId, credentials,
       oauth: { clientId: process.env[`${prefix}_CLIENT_ID`] ?? '', clientSecret: process.env[`${prefix}_CLIENT_SECRET`] ?? '', redirectUri: `${origin()}/api/connections/oauth/callback` },
-      onTokens: async tokens => { await db.providerConnection.update({ where: { id: connectionId }, data: { credentials: encryptCredentials(tokens) } }); },
+      refreshCredentials: async refresh=>db.$transaction(async tx=>{
+        await tx.$queryRaw`SELECT id FROM "ProviderConnection" WHERE id=${connectionId} FOR UPDATE`;
+        const current=await tx.providerConnection.findUniqueOrThrow({where:{id:connectionId}});
+        const verified=current.credentials?decryptCredentials<ProviderCredentials>(current.credentials):{};
+        const tokens=await refresh(verified);
+        const saved={...verified,accessToken:tokens.accessToken,refreshToken:tokens.refreshToken,expiresAt:tokens.expiresAt};
+        await tx.providerConnection.update({where:{id:connectionId},data:{credentials:encryptCredentials(saved)}});
+        return saved;
+      },{maxWait:10000,timeout:45000}),
+      onTokens: async tokens => {
+        await db.$transaction(async tx => {
+          await tx.$queryRaw`SELECT id FROM "ProviderConnection" WHERE id=${connectionId} FOR UPDATE`;
+          const current = await tx.providerConnection.findUniqueOrThrow({where:{id:connectionId}});
+          const verified = current.credentials ? decryptCredentials<ProviderCredentials>(current.credentials) : {};
+          await tx.providerConnection.update({where:{id:connectionId},data:{credentials:encryptCredentials({
+            ...verified,accessToken:tokens.accessToken,refreshToken:tokens.refreshToken,expiresAt:tokens.expiresAt,
+          })}});
+        });
+      },
     });
     const startedAt = new Date();
     const since = connection.lastSyncedAt ? new Date(connection.lastSyncedAt.getTime() - 300_000) : undefined;
@@ -79,6 +104,14 @@ export async function syncConnection(connectionId: string) {
     for (const review of reviews) {
       if (lostLock) throw new Error('sync_lock_lost');
       const created = await db.$transaction(async tx => {
+        await tx.$queryRaw`SELECT id FROM "ProviderConnection" WHERE id=${connectionId} FOR UPDATE`;
+        const current = await tx.providerConnection.findUniqueOrThrow({where:{id:connectionId}});
+        const resource = current.credentials ? decryptCredentials<ProviderCredentials>(current.credentials) : {};
+        if(current.mode!=='api'||current.status!=='connected'||['accountId','remoteLocationId','businessUnitId'].some(key=>resource[key as keyof ProviderCredentials]!==credentials[key as keyof ProviderCredentials])) {
+          throw new ProviderError('Connection mapping changed during synchronization.', 'configuration');
+        }
+        const owner=await tx.user.findUniqueOrThrow({where:{id:connection.location.userId},include:{subscription:true}});
+        if(!canOperateLocations(owner.subscription,await tx.location.count({where:{userId:owner.id}})))throw new ProviderError('Subscription capacity no longer permits synchronization.','configuration');
         const previous = await tx.review.findUnique({ where: { connectionId_externalId: { connectionId, externalId: review.externalId } } });
         if (previous) {
           // Keep the owner's local reply; enrich only when an upstream reply is present.
@@ -95,7 +128,15 @@ export async function syncConnection(connectionId: string) {
         await notificationQueue.add('new-review', { reviewId: created.id }, { ...jobOptions, jobId: `notice-${created.id}` });
       }
     }
-    await db.providerConnection.update({ where: { id: connectionId }, data: { lastSyncedAt: startedAt, lastError: null } });
+    await db.$transaction(async tx=>{
+      await tx.$queryRaw`SELECT id FROM "ProviderConnection" WHERE id=${connectionId} FOR UPDATE`;
+      const current=await tx.providerConnection.findUniqueOrThrow({where:{id:connectionId}});
+      const resource=current.credentials?decryptCredentials<ProviderCredentials>(current.credentials):{};
+      if(current.mode!=='api'||current.status!=='connected'||['accountId','remoteLocationId','businessUnitId'].some(key=>resource[key as keyof ProviderCredentials]!==credentials[key as keyof ProviderCredentials])) {
+        throw new ProviderError('Connection mapping changed during synchronization.', 'configuration');
+      }
+      await tx.providerConnection.update({where:{id:connectionId},data:{lastSyncedAt:startedAt,lastError:null}});
+    });
     await db.syncLog.update({ where: { id: logId }, data: { status: 'success', fetched: inserted, completedAt: new Date() } });
   } catch (error) {
     const safe = safeFailure(error);
@@ -111,7 +152,7 @@ export async function syncConnection(connectionId: string) {
 
 export async function notifyReview(reviewId: string) {
   const notice = await db.notification.findUnique({ where: { reviewId }, include: { user: { include: { pushSubscriptions: true, subscription: true } } } });
-  if (!notice || !isEntitled(notice.user.subscription)) return;
+  if (!notice || !await hasLocationCapacity(notice.user)) return;
   if (notice.user.notifyEmail && !notice.emailSentAt && mailReady()) {
     if (notice.emailAttemptedAt && !insideIdempotencyWindow(notice.emailAttemptedAt)) throw new UnrecoverableError('email_idempotency_window_expired_manual_check_required');
     if (!notice.emailAttemptedAt) await db.notification.update({ where: { id: notice.id }, data: { emailAttemptedAt: new Date() } });
@@ -145,7 +186,7 @@ export async function deliverRecipient(recipientId: string) {
   if (!item || item.sentAt || ['sent', 'skipped', 'failed', 'delivery_unknown'].includes(item.status)) return;
   const { campaign, contact } = item;
   if (contact.userId !== campaign.userId || campaign.location.userId !== campaign.userId) throw new UnrecoverableError('tenant_mismatch');
-  if (!isEntitled(campaign.user.subscription)) throw new UnrecoverableError('subscription_required');
+  if (!await hasLocationCapacity(campaign.user)) throw new UnrecoverableError('subscription_required');
   if (!['queued', 'sending'].includes(campaign.status)) return;
   const channel = campaign.channel === 'sms' ? 'sms' : 'email';
   if (!eligibleContact(contact, channel)) {

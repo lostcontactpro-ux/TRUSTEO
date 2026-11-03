@@ -57,3 +57,10 @@ export function assertLocationCapacity(subscription: Entitlement | null | undefi
     throw new Error('Votre abonnement ne permet pas d’ajouter cet établissement. Vérifiez votre essai ou changez de formule.');
   }
 }
+
+/** Existing data remains readable after downgrade, but billable operations stop
+ * until the owner removes excess locations or upgrades the subscription. */
+export function canOperateLocations(subscription: Entitlement | null | undefined, currentCount: number, now = new Date()): boolean {
+  const limit = locationLimit(subscription, now);
+  return limit > 0 && Number.isSafeInteger(currentCount) && currentCount >= 0 && currentCount <= limit;
+}

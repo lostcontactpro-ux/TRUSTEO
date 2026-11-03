@@ -37,6 +37,18 @@ export class GoogleProvider extends OAuthProvider implements ReviewProvider {
     }).toString();
     return { status: 'pending', mode: 'api', authorizationUrl: url.toString() };
   }
+  /** Fixed-host discovery shares the same 401 refresh path as review reads/replies. */
+  async listAccountsPage(pageToken='') {
+    const url=new URL('https://mybusinessaccountmanagement.googleapis.com/v1/accounts');
+    url.search=new URLSearchParams({pageSize:'20',...(pageToken?{pageToken}:{})}).toString();
+    return this.authorized<{accounts?:Array<{name:string;accountName?:string}>;nextPageToken?:string}>(url.toString());
+  }
+  async listLocationsPage(accountId:string,pageToken='') {
+    if(!/^[A-Za-z0-9_-]{1,200}$/.test(accountId))throw new ProviderError('Invalid Google account ID.','validation');
+    const url=new URL(`https://mybusinessbusinessinformation.googleapis.com/v1/accounts/${encodePath(accountId)}/locations`);
+    url.search=new URLSearchParams({pageSize:'100',readMask:'name,title,storefrontAddress',...(pageToken?{pageToken}:{})}).toString();
+    return this.authorized<{locations?:Array<{name:string;title?:string;storefrontAddress?:{addressLines?:string[];locality?:string;postalCode?:string}}>;nextPageToken?:string}>(url.toString());
+  }
   private locationPath() {
     return `accounts/${encodePath(requireValue(this.credentials.accountId, 'Google accountId'))}/locations/${encodePath(requireValue(this.credentials.remoteLocationId, 'Google remoteLocationId'))}`;
   }
@@ -82,5 +94,6 @@ export class GoogleProvider extends OAuthProvider implements ReviewProvider {
 export const definition: ProviderDefinition = {
   id: 'google', label: 'Google Business Profile',
   capabilities: { canRead: true, canReply: true, realtime: false, requiresPartnership: true },
+  allowedReviewHosts: ['google.com','google.fr','g.page'],
   modes: ['api', 'email', 'assisted'], create: (config: ProviderConfig) => new GoogleProvider(config),
 };

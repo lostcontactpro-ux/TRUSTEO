@@ -24,7 +24,7 @@ describe('Stripe billing configuration', () => {
   });
   it('creates the intro coupon only after verified resource_missing response', async () => {
     vi.stubEnv('STRIPE_INTRO_COUPON_ID', '');
-    const retrieve = vi.fn().mockRejectedValue(new Stripe.errors.StripeInvalidRequestError({ message: 'No such coupon', code: 'resource_missing' }));
+    const retrieve = vi.fn().mockRejectedValue(new Stripe.errors.StripeInvalidRequestError({ type: 'invalid_request_error', message: 'No such coupon', code: 'resource_missing' }));
     const create = vi.fn().mockResolvedValue({ id: 'trusteo_intro_20_2_months_v1' });
     const stripe = { coupons: { retrieve, create } } as unknown as Stripe;
     expect(await introductoryCoupon(stripe)).toBe('trusteo_intro_20_2_months_v1');

@@ -14,7 +14,7 @@ export abstract class OAuthProvider {
     this.request = config.fetch ?? fetch;
     this.credentials = { ...config.credentials };
   }
-  protected async tokenRequest(parameters: Record<string, string>): Promise<string> {
+  protected async tokenRequest(parameters: Record<string, string>, persist = true): Promise<string> {
     const result = await providerRequest<TokenResponse>(this.request, this.tokenUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...this.tokenHeaders() },
@@ -27,14 +27,27 @@ export abstract class OAuthProvider {
       refreshToken: result.refresh_token ?? this.credentials.refreshToken,
       expiresAt: result.expires_in ? Date.now() + result.expires_in * 1000 : undefined,
     };
-    await this.config.onTokens?.(this.credentials);
+    if(persist)await this.config.onTokens?.(this.credentials);
     return result.access_token;
   }
-  protected async accessToken(): Promise<string> {
-    if (this.credentials.accessToken && (this.credentials.expiresAt === undefined || this.credentials.expiresAt > Date.now() + 60000)) return this.credentials.accessToken;
-    const refreshToken = requireValue(this.credentials.refreshToken, 'accessToken or refreshToken');
-    if (!this.refreshInFlight) {
-      this.refreshInFlight = this.tokenRequest({ grant_type: 'refresh_token', refresh_token: refreshToken }).finally(() => { this.refreshInFlight = undefined; });
+  protected async accessToken(invalidAccessToken?:string): Promise<string> {
+    const usable=()=>!!this.credentials.accessToken&&this.credentials.accessToken!==invalidAccessToken&&(this.credentials.expiresAt===undefined||this.credentials.expiresAt>Date.now()+60000);
+    if(usable())return this.credentials.accessToken!;
+    if(!this.refreshInFlight){
+      this.refreshInFlight=(async()=>{
+        const refresh=async(latest:ProviderCredentials)=>{
+          // Keep candidate resource IDs in this instance; only tokens may be reloaded.
+          this.credentials={...this.credentials,accessToken:latest.accessToken,refreshToken:latest.refreshToken,expiresAt:latest.expiresAt};
+          // Another process may already have refreshed the expired/revoked token.
+          if(usable())return this.credentials;
+          const refreshToken=requireValue(this.credentials.refreshToken,'accessToken or refreshToken');
+          await this.tokenRequest({grant_type:'refresh_token',refresh_token:refreshToken},!this.config.refreshCredentials);
+          return this.credentials;
+        };
+        const updated=this.config.refreshCredentials?await this.config.refreshCredentials(refresh):await refresh(this.credentials);
+        this.credentials={...this.credentials,accessToken:updated.accessToken,refreshToken:updated.refreshToken,expiresAt:updated.expiresAt};
+        return requireValue(this.credentials.accessToken,'refreshed accessToken');
+      })().finally(()=>{this.refreshInFlight=undefined});
     }
     return this.refreshInFlight;
   }
@@ -44,8 +57,8 @@ export abstract class OAuthProvider {
     catch (error) {
       if (!(error instanceof ProviderError) || error.code !== 'authorization' || error.statusCode !== 401 || !this.credentials.refreshToken) throw error;
       // One refresh retry only. A revoked/forbidden scope remains an actionable failure.
-      this.credentials.expiresAt = 0;
-      headers.Authorization = `Bearer ${await this.accessToken()}`;
+      const rejectedToken=headers.Authorization.slice('Bearer '.length);
+      headers.Authorization = `Bearer ${await this.accessToken(rejectedToken)}`;
       return providerRequest<T>(this.request, url, { ...init, headers });
     }
   }

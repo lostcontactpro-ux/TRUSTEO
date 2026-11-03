@@ -9,3 +9,15 @@
 - Pro : jusqu'à 20 établissements, Essentiel : jusqu'à 3. Le seuil de 3 pour Pro est un positionnement commercial, pas une obligation de créer 3 établissements.
 - Entreprise : devis et plafond accordé explicitement côté serveur, aucune limite infinie implicite.
 - Textes juridiques et témoignages exemples : brouillons identifiés, à personnaliser avant production.
+- Auth : sessions opaques aléatoires, hachées en PostgreSQL plutôt qu'Auth.js. Cookies HttpOnly/SameSite, contrôle strict Origin pour CSRF, bcrypt12 et révocation lors d'un reset. Compteurs de débit atomiques PostgreSQL partagés entre instances.
+- Prisma 6.19.3 : client sans moteur natif avec pilote officiel PrismaPg, moteur de schéma WASM via prisma.config.ts (option adapter expérimentale). Le moteur natif est bloqué par le réseau cloud. Le WASM génère le SQL initial correctement mais `migrate deploy` échoue sur le type interne PostgreSQL `name`. `scripts/migrate.mjs` applique donc les SQL Prisma dans une transaction, avec verrou consultatif et registre SHA256. Ne pas mélanger ce registre avec `prisma migrate deploy` sans reprise explicite.
+- Inter est distribuée localement, aucune requête Google Fonts.
+- Remise d'introduction Stripe : uniquement deux mensualités ; les forfaits annuels ont déjà leur tarif spécifique. L'essai n'est accordé qu'après webhook Stripe signé, jamais sur simple inscription.
+- Email d'avis entrants : passerelle HMAC documentée, à brancher à un domaine détenu et à une vérification DKIM/ARC ; le parseur refuse les formats inconnus, sans inventer de note ni d'auteur.
+- Campagnes : salutations approuvées et invitation neutre imposée, consentement et désinscription vérifiés de nouveau au moment de l'envoi. Aucun ciblage selon note/satisfaction.
+- Fidélité : une remise par client pour cette première version, 90 jours d'expiration ; la référence d'achat est attestée par le commerçant, sans prétendre vérifier une caisse non connectée.
+- Notifications : email idempotent avec fenêtre conservatrice de 23h ; au-delà, rapprochement manuel pour éviter les doublons. SMS à statut incertain mis en quarantaine. Push au moins une fois avec regroupement par avis côté navigateur.
+- Publier une réponse assistée ne marque jamais l'avis comme répondu. La copie et l'ouverture de la plateforme restent sous contrôle du gérant.
+
+- Renouvellement OAuth : verrou de ligne PostgreSQL partagé entre le web et le worker, relecture des jetons sous verrou et conservation des identifiants de ressource validés.
+- Outillage : Prisma CLI est une dépendance de développement à la racine du monorepo ; override deepmerge-ts 8 pour corriger son avis de sécurité, validé par génération et build. Vitest 5 remplace la version initiale vulnérable.

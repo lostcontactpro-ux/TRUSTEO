@@ -4,7 +4,7 @@ import { ProviderError } from './types';
 export async function providerRequest<T>(request: typeof fetch, url: string, init: RequestInit = {}): Promise<T> {
   let response: Response;
   try {
-    response = await request(url, { ...init, signal: init.signal ?? AbortSignal.timeout(20000) });
+    response = await request(url, { ...init, redirect: 'error', cache: 'no-store', signal: init.signal ?? AbortSignal.timeout(20000) });
   } catch {
     throw new ProviderError('The provider could not be reached.', 'upstream', true);
   }

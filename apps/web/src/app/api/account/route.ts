@@ -30,11 +30,25 @@ export async function DELETE(request: Request) {
     guardMutation(request); const user = await requireUser(); await rateLimit(`account-delete:${user.id}`, 5, 3600);
     const input = z.object({ password: z.string().min(1).max(72), confirmation: z.literal('SUPPRIMER') }).strict().parse(await jsonBody(request));
     if (!await compare(input.password, user.passwordHash)) throw new HttpError(401, 'Mot de passe incorrect.');
-    if (user.subscription?.stripeSubscriptionId && !['canceled', 'incomplete_expired'].includes(user.subscription.status)) {
-      throw new HttpError(409, 'Annulez votre abonnement dans le portail de facturation avant de supprimer le compte, afin d’arrêter les prélèvements.');
-    }
+    await db.$transaction(async tx => {
+      // A stale session snapshot must not allow deletion while Checkout is opened.
+      // Checkout's reservation update locks this same Subscription row. If deletion
+      // wins, its later reservation cannot succeed; if Checkout wins, reject here.
+      await tx.$queryRaw`SELECT id FROM "User" WHERE id=${user.id} FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM "Subscription" WHERE "userId"=${user.id} FOR UPDATE`;
+      const subscription = await tx.subscription.findUnique({ where: { userId: user.id } });
+      const expiredReservation = subscription?.checkoutSessionId?.startsWith('pending:') && subscription.checkoutExpiresAt && subscription.checkoutExpiresAt <= new Date();
+      if (subscription?.checkoutSessionId && !expiredReservation) {
+        throw new HttpError(409, 'Une page de paiement est encore associée à votre compte. Attendez sa confirmation ou son expiration avant de supprimer le compte.');
+      }
+      if (subscription?.stripeSubscriptionId && !['canceled', 'incomplete_expired'].includes(subscription.status)) {
+        throw new HttpError(409, 'Annulez votre abonnement dans le portail de facturation avant de supprimer le compte, afin d’arrêter les prélèvements.');
+      }
+      await tx.user.delete({ where: { id: user.id } });
+    });
+    // Cascading deletion already revoked every session. Clear the browser cookie
+    // only after successful deletion; a billing conflict leaves the user signed in.
     await destroySession();
-    await db.user.delete({ where: { id: user.id } });
     return Response.json({ ok: true });
   } catch (error) { return apiError(error); }
 }

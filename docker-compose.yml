@@ -1,0 +1,85 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: trusteo
+      POSTGRES_PASSWORD: trusteo_local_only
+      POSTGRES_DB: trusteo
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trusteo -d trusteo"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  migrate:
+    profiles: ["app"]
+    build:
+      context: .
+      target: dev
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://trusteo:trusteo_local_only@postgres:5432/trusteo
+      REDIS_URL: redis://redis:6379
+    volumes:
+      - ./.env:/app/.env:ro
+    command: ["npm", "run", "db:migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+  web:
+    profiles: ["app"]
+    build:
+      context: .
+      target: dev
+    env_file: .env
+    environment:
+      NODE_ENV: development
+      APP_URL: http://localhost:3000
+      DATABASE_URL: postgresql://trusteo:trusteo_local_only@postgres:5432/trusteo
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - ./.env:/app/.env:ro
+      - ./apps/web/src:/app/apps/web/src
+      - ./apps/web/public:/app/apps/web/public
+      - ./packages/core/src:/app/packages/core/src
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+  worker:
+    profiles: ["app"]
+    build:
+      context: .
+      target: worker
+    env_file: .env
+    environment:
+      NODE_ENV: development
+      APP_URL: http://localhost:3000
+      DATABASE_URL: postgresql://trusteo:trusteo_local_only@postgres:5432/trusteo
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+volumes:
+  postgres_data:
+  redis_data:

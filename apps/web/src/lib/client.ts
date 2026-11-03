@@ -5,4 +5,4 @@ export async function api<T = Record<string, unknown>>(path: string, init?: Requ
   if (!response.ok) throw new Error(typeof payload.error === 'string' ? payload.error : 'Une erreur est survenue. Réessayez.');
   return payload as T;
 }
-export const json = (method: string, body?: unknown): RequestInit => ({method, ...(body === undefined ? {} : {body: JSON.stringify(body)})});
+export const json = (method: string, body?: unknown): RequestInit => ({method, ...(['GET','HEAD'].includes(method.toUpperCase()) ? {} : {body: JSON.stringify(body ?? {})})});

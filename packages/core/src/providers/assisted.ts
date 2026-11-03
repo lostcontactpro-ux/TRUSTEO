@@ -19,9 +19,9 @@ export class AssistedProvider implements ReviewProvider {
     throw new ProviderError(`${this.label}: copy the response and publish it on the source platform.`, 'unsupported');
   }
 }
-export function assistedDefinition(id: PlatformId, label: string, requiresPartnership = true): ProviderDefinition {
+export function assistedDefinition(id: PlatformId, label: string, requiresPartnership = true, allowedReviewHosts: readonly string[] = []): ProviderDefinition {
   return {
-    id, label, modes: ['email', 'assisted'],
+    id, label, modes: ['email', 'assisted'], allowedReviewHosts,
     capabilities: { canRead: false, canReply: false, realtime: false, requiresPartnership },
     create: config => new AssistedProvider(id, label, config, requiresPartnership),
   };

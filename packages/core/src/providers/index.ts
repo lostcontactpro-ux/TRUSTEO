@@ -1,11 +1,12 @@
 import { providerDefinitions } from './registry.generated';
-import { ProviderError, type PlatformId, type ProviderConfig, type ProviderDefinition, type ReviewProvider } from './types';
+import { ProviderError, platformIdSchema, type PlatformId, type ProviderConfig, type ProviderDefinition, type ReviewProvider } from './types';
 
 export * from './types';
 export * from './email';
 export { GoogleProvider } from './google';
 export { TrustpilotProvider } from './trustpilot';
 export { providerDefinitions };
+export const platformIds=providerDefinitions.map(definition=>platformIdSchema.parse(definition.id));
 export const providerRegistry = new Map<PlatformId, ProviderDefinition>(providerDefinitions.map(definition => [definition.id, definition]));
 if (providerRegistry.size !== providerDefinitions.length) throw new Error('Duplicate review provider ID.');
 export function createProvider(id: string, config: ProviderConfig): ReviewProvider {

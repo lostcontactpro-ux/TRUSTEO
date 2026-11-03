@@ -3,10 +3,11 @@ import { eligibleContact } from '@trusteo/core/campaigns';
 import { db } from '@/lib/db';
 import { requireUser } from '@/lib/auth';
 import { apiError,guardMutation,HttpError,rateLimit } from '@/lib/security';
-import { requireEntitlement,requireMessaging } from '@/lib/campaigns';
+import { requireMessaging } from '@/lib/campaigns';
+import { requireEntitlement } from '@/lib/entitlements';
 import { enqueueCampaignRecipients } from '@/lib/queue';
 export async function POST(request:Request,{params}:{params:Promise<{id:string}>}){try{
-  guardMutation(request);const user=await requireUser();requireEntitlement(user.subscription);await rateLimit(`campaign-send:${user.id}`,10,3600);const {id}=await params;
+  guardMutation(request);const user=await requireUser();await requireEntitlement(user);await rateLimit(`campaign-send:${user.id}`,10,3600);const {id}=await params;
   const campaign=await db.campaign.findFirst({where:{id,userId:user.id},include:{location:true}});
   if(!campaign)throw new HttpError(404,'Campagne introuvable.');if(!campaign.location.reviewUrl)throw new HttpError(400,'Le lien de dépôt d’avis est requis.');requireMessaging(campaign.channel);
   await db.$transaction(async tx=>{

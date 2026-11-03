@@ -1,3 +1,3 @@
 import { assistedDefinition } from './assisted';
 
-export const definition = assistedDefinition('appstore', 'App Store', false);
+export const definition = assistedDefinition('appstore', 'App Store', false, ['apps.apple.com']);

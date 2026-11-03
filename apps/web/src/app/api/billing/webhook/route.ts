@@ -66,6 +66,15 @@ export async function POST(request: Request) {
       // Fetch Stripe's current state rather than trust a stale delivery payload.
       const current = await stripe.subscriptions.retrieve(received.id);
       await applySubscription(event, current);
+    } else if (event.type === 'checkout.session.expired') {
+      const session = event.data.object as Stripe.Checkout.Session;
+      const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id;
+      if (customerId) {
+        await db.$transaction(async tx => {
+          await tx.webhookEvent.create({ data: { id: event.id, provider: 'stripe', type: event.type } });
+          await tx.subscription.updateMany({ where: { stripeCustomerId: customerId, checkoutSessionId: session.id }, data: { checkoutSessionId: null, checkoutExpiresAt: null } });
+        });
+      }
     } else if (event.type === 'checkout.session.completed') {
       const session = event.data.object as Stripe.Checkout.Session;
       if (session.mode === 'subscription' && session.subscription) {
@@ -74,7 +83,10 @@ export async function POST(request: Request) {
       }
     }
     return Response.json({ received: true });
-  } catch {
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002' && await db.webhookEvent.findUnique({ where: { id: event.id } })) {
+      return Response.json({ received: true, duplicate: true });
+    }
     // Let Stripe retry; never acknowledge failed entitlement persistence.
     console.error('Stripe webhook processing failed', { eventId: event.id, type: event.type });
     return Response.json({ error: 'Traitement temporairement indisponible.' }, { status: 500 });

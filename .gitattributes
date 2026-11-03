@@ -1,0 +1,2 @@
+# Preserve generated SQL verbatim: applied migration checksums are immutable.
+apps/web/prisma/migrations/**/migration.sql whitespace=-blank-at-eof

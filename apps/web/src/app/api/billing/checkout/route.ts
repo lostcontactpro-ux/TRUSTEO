@@ -20,13 +20,19 @@ export async function POST(request: Request) {
       throw new HttpError(503, 'Le tarif Stripe ne correspond pas aux tarifs Trusteo.');
     }
     let subscription = await db.subscription.upsert({ where: { userId: user.id }, create: { userId: user.id }, update: {} });
-    if (['active', 'trialing', 'past_due', 'unpaid'].includes(subscription.status)) throw new HttpError(409, 'Gérez votre abonnement existant depuis le portail client.');
-    if (subscription.checkoutSessionId && subscription.checkoutExpiresAt && subscription.checkoutExpiresAt > new Date()) {
-      if (subscription.checkoutSessionId.startsWith('pending:')) throw new HttpError(409, 'Une page de paiement est déjà en cours de création. Réessayez dans une minute.');
-      const existing = await stripe.checkout.sessions.retrieve(subscription.checkoutSessionId);
-      if (existing.status === 'open' && existing.url) return Response.json({ url: existing.url });
-      if (existing.status === 'complete') throw new HttpError(409, 'Paiement reçu. La confirmation de votre abonnement est en cours.');
-      await db.subscription.updateMany({ where: { id: subscription.id, checkoutSessionId: existing.id }, data: { checkoutSessionId: null, checkoutExpiresAt: null } });
+    if ((subscription.stripeSubscriptionId && !['canceled', 'incomplete_expired'].includes(subscription.status)) || ['active', 'trialing', 'past_due', 'unpaid', 'paused'].includes(subscription.status)) throw new HttpError(409, 'Gérez votre abonnement existant depuis le portail client.');
+    if (subscription.checkoutSessionId) {
+      if (subscription.checkoutSessionId.startsWith('pending:')) {
+        if (!subscription.checkoutExpiresAt || subscription.checkoutExpiresAt > new Date()) throw new HttpError(409, 'Une page de paiement est déjà en cours de création. Réessayez dans quelques minutes.');
+      } else {
+        // The local expiry alone cannot establish that Checkout was unpaid: it
+        // may have completed before expiry while its webhook is still delayed.
+        const existing = await stripe.checkout.sessions.retrieve(subscription.checkoutSessionId);
+        if (existing.status === 'open' && existing.url) return Response.json({ url: existing.url });
+        if (existing.status === 'complete') throw new HttpError(409, 'Paiement reçu. La confirmation de votre abonnement est en cours.');
+        if (existing.status !== 'expired') throw new HttpError(503, 'L’état du paiement doit être confirmé par Stripe.');
+        await db.subscription.updateMany({ where: { id: subscription.id, checkoutSessionId: existing.id }, data: { checkoutSessionId: null, checkoutExpiresAt: null } });
+      }
     }
     let customerId = subscription.stripeCustomerId;
     if (!customerId) {
@@ -35,10 +41,13 @@ export async function POST(request: Request) {
       subscription = await db.subscription.update({ where: { userId: user.id }, data: { stripeCustomerId: customerId } });
     }
     const reservation = `pending:${randomUUID()}`;
-    const reserved = await db.subscription.updateMany({ where: { id: subscription.id, OR: [{ checkoutExpiresAt: null }, { checkoutExpiresAt: { lte: new Date() } }] }, data: { checkoutSessionId: reservation, checkoutExpiresAt: new Date(Date.now() + 90_000) } });
+    const reserved = await db.subscription.updateMany({ where: { id: subscription.id, OR: [{ checkoutExpiresAt: null }, { checkoutExpiresAt: { lte: new Date() } }] }, data: { checkoutSessionId: reservation, checkoutExpiresAt: new Date(Date.now() + 15 * 60_000) } });
     if (reserved.count !== 1) throw new HttpError(409, 'Une page de paiement est déjà ouverte ou en cours de création.');
     try {
-    const history = await stripe.subscriptions.list({ customer: customerId, status: 'all', limit: 1 });
+    const history = await stripe.subscriptions.list({ customer: customerId, status: 'all', limit: 100 });
+    if (history.has_more || history.data.some(item => !['canceled', 'incomplete_expired'].includes(item.status))) {
+      throw new HttpError(409, 'Un abonnement Stripe existe déjà ou nécessite une vérification. Utilisez le portail client plutôt qu’un nouveau paiement.');
+    }
     const trial = !subscription.trialUsed && history.data.length === 0;
     const coupon = trial && interval === 'month' ? await introductoryCoupon(stripe) : undefined;
     const session = await stripe.checkout.sessions.create({
@@ -53,7 +62,12 @@ export async function POST(request: Request) {
       success_url: `${appUrl()}/app/settings?checkout=success`, cancel_url: `${appUrl()}/signup?step=3`,
       metadata: { userId: user.id, plan, interval },
     }, { idempotencyKey: `trusteo-checkout-${user.id}-${plan}-${interval}-${Math.floor(Date.now() / 3_600_000)}` });
-    await db.subscription.update({ where: { userId: user.id }, data: { checkoutSessionId: session.id, checkoutExpiresAt: new Date(session.expires_at * 1000) } });
+    const saved = await db.subscription.updateMany({ where: { id: subscription.id, checkoutSessionId: reservation }, data: { checkoutSessionId: session.id, checkoutExpiresAt: new Date(session.expires_at * 1000) } });
+    if (saved.count !== 1) {
+      // Never return an untracked live payment URL after a lost reservation.
+      if (session.status === 'open') await stripe.checkout.sessions.expire(session.id);
+      throw new HttpError(409, 'Cette demande de paiement a expiré. Réessayez.');
+    }
     if (!session.url) throw new HttpError(502, 'Stripe n’a pas fourni de page de paiement.');
     return Response.json({ url: session.url });
     } catch (error) {

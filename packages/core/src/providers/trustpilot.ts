@@ -49,6 +49,7 @@ export class TrustpilotProvider extends OAuthProvider implements ReviewProvider 
         const changedAt = new Date(review.updatedAt ?? review.createdAt);
         if (Number.isNaN(date.getTime()) || Number.isNaN(changedAt.getTime())) throw new ProviderError('Trustpilot returned an invalid review date.', 'upstream');
         if (since && changedAt < since) continue;
+        if(!Number.isInteger(review.stars)||review.stars<1||review.stars>5)throw new ProviderError('Trustpilot returned an invalid star rating.','upstream');
         const normalized = normalizedReviewSchema.parse({
           externalId: review.id, platform: this.id, locationId: this.config.locationId,
           author: review.consumer?.displayName || 'Trustpilot user', rating: review.stars,
@@ -75,5 +76,6 @@ export class TrustpilotProvider extends OAuthProvider implements ReviewProvider 
 export const definition: ProviderDefinition = {
   id: 'trustpilot', label: 'Trustpilot',
   capabilities: { canRead: true, canReply: true, realtime: false, requiresPartnership: true },
+  allowedReviewHosts: ['trustpilot.com'],
   modes: ['api', 'email', 'assisted'], create: config => new TrustpilotProvider(config),
 };

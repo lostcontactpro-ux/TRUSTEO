@@ -26,8 +26,26 @@ export function providerOAuth(platform: string) {
 export function makeProvider(connection: ProviderConnection) {
   return createProvider(connection.platform, {
     locationId: connection.locationId, credentials: readProviderCredentials(connection), oauth: providerOAuth(connection.platform),
+    refreshCredentials: async refresh=>db.$transaction(async tx=>{
+      await tx.$queryRaw`SELECT id FROM "ProviderConnection" WHERE id=${connection.id} FOR UPDATE`;
+      const current=await tx.providerConnection.findUniqueOrThrow({where:{id:connection.id}});
+      const verified=readProviderCredentials(current);
+      const tokens=await refresh(verified);
+      const saved={...verified,accessToken:tokens.accessToken,refreshToken:tokens.refreshToken,expiresAt:tokens.expiresAt};
+      await tx.providerConnection.update({where:{id:connection.id},data:{credentials:encryptCredentials(saved)}});
+      return saved;
+    },{maxWait:10000,timeout:45000}),
     onTokens: async credentials => {
-      await db.providerConnection.update({where:{id:connection.id},data:{credentials:encryptCredentials(credentials)}});
+      // A verification request may hold candidate resource IDs. Persist only tokens
+      // until the caller has verified and committed its resource selection.
+      await db.$transaction(async tx=>{
+        await tx.$queryRaw`SELECT id FROM "ProviderConnection" WHERE id=${connection.id} FOR UPDATE`;
+        const current=await tx.providerConnection.findUniqueOrThrow({where:{id:connection.id}});
+        const verified=readProviderCredentials(current);
+        await tx.providerConnection.update({where:{id:connection.id},data:{credentials:encryptCredentials({
+          ...verified,accessToken:credentials.accessToken,refreshToken:credentials.refreshToken,expiresAt:credentials.expiresAt,
+        })}});
+      });
     },
   });
 }
