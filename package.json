@@ -22,7 +22,10 @@
     "db:migrate": "node --env-file=.env scripts/migrate.mjs",
     "providers:generate": "node packages/core/src/providers/generate-registry.mjs",
     "predev": "npm run providers:generate",
-    "prebuild": "npm run providers:generate"
+    "prebuild": "npm run providers:generate",
+    "lovable:links": "node scripts/lovable-links.mjs",
+    "db:migrate:deploy": "node scripts/migrate.mjs",
+    "test:standalone": "node --env-file-if-exists=.env scripts/smoke-standalone.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

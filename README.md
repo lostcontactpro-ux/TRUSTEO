@@ -138,6 +138,8 @@ Les tests Playwright lancent un serveur sur le port 3100 et contrôlent le rendu
 
 ## Site public Lovable
 
+La [checklist de liaison](docs/relier-lovable-checklist.md) couvre le déploiement Vercel, les accès nécessaires et la génération des liens avec `npm run lovable:links`. Le projet Lovable et son dépôt ne sont pas modifiés automatiquement.
+
 Le site public est `https://trus-teo.lovable.app`. Le [guide Lovable et Stripe](docs/lovable-stripe.md) explique comment le relier à cette application Next.js après déploiement, où placer les clés serveur et quels IDs de tarifs fournir. Aucune liaison ou publication n’est présumée effectuée.
 
 ## Migrations et déploiement

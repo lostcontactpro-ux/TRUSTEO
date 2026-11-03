@@ -13,6 +13,8 @@ Le web et le worker sont deux processus distincts. PostgreSQL conserve comptes, 
 
 ## Vercel : application web
 
+La configuration versionnée se trouve dans [apps/web/vercel.json](../apps/web/vercel.json). Le réglage **Root Directory = apps/web** se fait dans le projet Vercel ; ce n’est pas une propriété de ce fichier. La version Node est fixée à 24.x dans le paquet web.
+
 Importer le monorepo. Choisir `apps/web` comme Root Directory et autoriser les fichiers hors de cette racine (paquet `packages/core`). Utiliser Node.js 24. Installer depuis la racine du dépôt pour conserver les workspaces et le lockfile :
 
 - Install Command : `cd ../.. && npm ci`
@@ -26,7 +28,7 @@ Les migrations s'exécutent comme étape de release contrôlée, avec accès à 
 ```bash
 npm ci
 npm run db:generate
-npm run db:migrate
+npm run db:migrate:deploy
 npm run build
 # Pour un hébergement Node autonome (hors Vercel) :
 npm start
@@ -34,7 +36,7 @@ npm start
 
 Le build prépare les ressources statiques et publiques du serveur standalone.
 
-Ces commandes supposent un `.env` sécurisé à la racine pour le runner de migration, et le lien local `apps/web/.env` si les commandes Next doivent lire ce fichier. En CI où les valeurs sont injectées dans le processus, créer un fichier `.env` vide pour satisfaire `--env-file=.env` suffit ; les variables héritées conservent leur priorité. N'écrivez jamais les secrets dans un artefact ou des logs.
+En CI, `npm run db:migrate:deploy` utilise les variables injectées sans exiger de fichier `.env`. En développement, `npm run db:migrate` charge le `.env` racine ; les commandes Next peuvent utiliser le lien local `apps/web/.env`. N'écrivez jamais de secrets dans des artefacts ou des logs.
 
 Le runner [scripts/migrate.mjs](../scripts/migrate.mjs) utilise un verrou consultatif, une transaction par migration et un registre de checksums. N'exécutez pas `prisma migrate deploy` en parallèle de ce registre. Les fichiers SQL initiaux proviennent du moteur de diff Prisma officiel ; cette voie évite un défaut d'introspection rencontré avec le moteur WASM. Pour une évolution du schéma : générer une **nouvelle** migration, relire le SQL, tester sur une copie de base, sauvegarder, appliquer puis déployer. Les changements destructeurs demandent une procédure de migration spécifique.
 
