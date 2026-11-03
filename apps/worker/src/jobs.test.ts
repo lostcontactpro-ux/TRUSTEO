@@ -32,8 +32,9 @@ describe('delivery consent and entitlement', () => {
   });
 });
 describe('sync watermark and credential safety', () => {
+  it('never polls an API connection before explicit business confirmation',async()=>{mocks.connectionFind.mockResolvedValue({id:'connection1',status:'connected',mode:'api',confirmedAt:null,location:{userId:'owner1',user:{id:'owner1',subscription}}});await syncConnection('connection1');expect(mocks.createProvider).not.toHaveBeenCalled();expect(mocks.syncCreate).not.toHaveBeenCalled();});
   it('does not advance the sync watermark after an upstream failure', async () => {
-    mocks.connectionFind.mockResolvedValue({ id: 'connection1', status: 'connected', mode: 'api', platform: 'google', locationId: 'location1', credentials: encryptCredentials({ accessToken: 'token' }), lastSyncedAt: new Date(0), location: { userId:'owner1', name: 'Bistrot', user: { id:'owner1', subscription } } });
+    mocks.connectionFind.mockResolvedValue({ id: 'connection1', status: 'connected', confirmedAt:new Date(), mode: 'api', platform: 'google', locationId: 'location1', credentials: encryptCredentials({ accessToken: 'token' }), lastSyncedAt: new Date(0), location: { userId:'owner1', name: 'Bistrot', user: { id:'owner1', subscription } } });
     mocks.createProvider.mockReturnValue({ fetchReviews: async () => { throw new Error('upstream token=secret'); } });
     await expect(syncConnection('connection1')).rejects.toThrow('operation_failed');
     expect(mocks.connectionUpdate).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ lastSyncedAt: expect.anything() }) }));

@@ -33,7 +33,7 @@ async function sendEmail(input: { to: string; subject: string; text: string; key
 
 /** Repeatable dispatcher also recovers inserts committed before queue enqueue. */
 export async function dispatch() {
-  const connections = await db.providerConnection.findMany({ where: { status: 'connected', mode: 'api' }, include: { location: { include: { user: { include: { subscription: true } } } } } });
+  const connections = await db.providerConnection.findMany({ where: { status: 'connected', mode: 'api', confirmedAt:{not:null} }, include: { location: { include: { user: { include: { subscription: true } } } } } });
   const bucket = Math.floor(Date.now() / 600_000);
   const capacity=new Map<string,boolean>();
   for(const connection of connections){const user=connection.location.user;if(!capacity.has(user.id))capacity.set(user.id,await hasLocationCapacity(user));}
@@ -52,6 +52,9 @@ export async function dispatch() {
   // Recover scheduled campaigns whose initial queue insertion was interrupted.
   const recipients = await db.campaignRecipient.findMany({ where: { status: { in: ['pending', 'retry'] }, campaign: { status: { in: ['queued', 'sending'] } } }, select: { id: true } });
   await deliveryQueue.addBulk(recipients.map(r => ({ name: 'campaign-recipient', data: { recipientId: r.id }, opts: { ...jobOptions, jobId: `recipient-${r.id}` } })));
+  // Expired previews may hold a candidate API key and review samples. Their
+  // confirmation is already rejected by TTL; remove the encrypted payload too.
+  await db.providerConnection.updateMany({where:{previewExpiresAt:{lt:new Date()}},data:{pendingPreview:null,previewTokenHash:null,previewExpiresAt:null}});
   // Retain only operational counters, not an unbounded list of stale auth keys.
   await db.rateLimit.deleteMany({ where: { resetAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) } } });
   await db.session.deleteMany({ where: { expiresAt: { lt: new Date() } } });
@@ -68,7 +71,7 @@ export async function syncConnection(connectionId: string) {
   let logId: string | undefined;
   try {
     const connection = await db.providerConnection.findUnique({ where: { id: connectionId }, include: { location: { include: { user: { include: { subscription: true } } } } } });
-    if (!connection || connection.mode !== 'api' || connection.status !== 'connected' || !await hasLocationCapacity(connection.location.user)) return;
+    if (!connection || connection.mode !== 'api' || connection.status !== 'connected' || !connection.confirmedAt || !await hasLocationCapacity(connection.location.user)) return;
     logId = (await db.syncLog.create({ data: { connectionId, status: 'running' } })).id;
     if (!connection.credentials) throw new ProviderError('Encrypted credentials are required.', 'configuration');
     const credentials = decryptCredentials<ProviderCredentials>(connection.credentials);
@@ -107,7 +110,7 @@ export async function syncConnection(connectionId: string) {
         await tx.$queryRaw`SELECT id FROM "ProviderConnection" WHERE id=${connectionId} FOR UPDATE`;
         const current = await tx.providerConnection.findUniqueOrThrow({where:{id:connectionId}});
         const resource = current.credentials ? decryptCredentials<ProviderCredentials>(current.credentials) : {};
-        if(current.mode!=='api'||current.status!=='connected'||['accountId','remoteLocationId','businessUnitId'].some(key=>resource[key as keyof ProviderCredentials]!==credentials[key as keyof ProviderCredentials])) {
+        if(current.mode!=='api'||current.status!=='connected'||!current.confirmedAt||['accountId','remoteLocationId','businessUnitId'].some(key=>resource[key as keyof ProviderCredentials]!==credentials[key as keyof ProviderCredentials])) {
           throw new ProviderError('Connection mapping changed during synchronization.', 'configuration');
         }
         const owner=await tx.user.findUniqueOrThrow({where:{id:connection.location.userId},include:{subscription:true}});
@@ -132,7 +135,7 @@ export async function syncConnection(connectionId: string) {
       await tx.$queryRaw`SELECT id FROM "ProviderConnection" WHERE id=${connectionId} FOR UPDATE`;
       const current=await tx.providerConnection.findUniqueOrThrow({where:{id:connectionId}});
       const resource=current.credentials?decryptCredentials<ProviderCredentials>(current.credentials):{};
-      if(current.mode!=='api'||current.status!=='connected'||['accountId','remoteLocationId','businessUnitId'].some(key=>resource[key as keyof ProviderCredentials]!==credentials[key as keyof ProviderCredentials])) {
+      if(current.mode!=='api'||current.status!=='connected'||!current.confirmedAt||['accountId','remoteLocationId','businessUnitId'].some(key=>resource[key as keyof ProviderCredentials]!==credentials[key as keyof ProviderCredentials])) {
         throw new ProviderError('Connection mapping changed during synchronization.', 'configuration');
       }
       await tx.providerConnection.update({where:{id:connectionId},data:{lastSyncedAt:startedAt,lastError:null}});

@@ -65,6 +65,8 @@ export function publicConnection(connection: ProviderConnection & {location?:{id
     id:connection.id,locationId:connection.locationId,platform:connection.platform,mode:connection.mode,status:connection.status,
     externalId:connection.externalId,lastSyncedAt:connection.lastSyncedAt,lastError:connection.lastError,
     createdAt:connection.createdAt,updatedAt:connection.updatedAt,
+    authMethod:connection.authMethod,testedAt:connection.testedAt,confirmedAt:connection.confirmedAt,hasPendingPreview:!!connection.pendingPreview,
+    capabilities:{...providerRegistry.get(connection.platform)?.capabilities,canReply:connection.mode==='api'&&connection.status==='connected'&&!!connection.confirmedAt&&connection.authMethod!=='apiKey'&&!!providerRegistry.get(connection.platform)?.capabilities.canReply},
     ...(connection.location?{location:{id:connection.location.id,name:connection.location.name,city:connection.location.city}}:{}),
     inboxAddress:connection.inboxToken&&domain?`${connection.inboxToken}@${domain}`:null,
     hasCredentials:!!connection.credentials,

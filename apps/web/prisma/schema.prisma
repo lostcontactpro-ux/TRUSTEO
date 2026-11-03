@@ -97,6 +97,12 @@ model ProviderConnection {
   status       String    @default("pending")
   externalId   String?
   credentials  String?
+  authMethod   String    @default("oauth")
+  pendingPreview String?
+  previewTokenHash String? @unique
+  previewExpiresAt DateTime?
+  testedAt     DateTime?
+  confirmedAt  DateTime?
   inboxToken   String?   @unique
   lastSyncedAt DateTime?
   lastError    String?

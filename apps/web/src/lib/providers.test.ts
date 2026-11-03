@@ -24,7 +24,7 @@ vi.mock('next/headers',()=>({cookies:async()=>({
   set:(name:string,value:string,options:unknown)=>{mocked.cookie=value||undefined;mocked.setCookie(name,value,options)},
 })}));
 import { consumeProviderOAuth,makeProvider,publicConnection,startProviderOAuth } from './providers';
-const connection=():ProviderConnection=>({id:'conn-one',locationId:'loc-one',platform:'google',mode:'api',status:'pending',externalId:null,credentials:mocked.current.credentials,inboxToken:'private-inbox',lastSyncedAt:null,lastError:null,createdAt:new Date(),updatedAt:new Date()});
+const connection=():ProviderConnection=>({id:'conn-one',locationId:'loc-one',platform:'google',mode:'api',status:'pending',authMethod:'oauth',pendingPreview:null,previewTokenHash:null,previewExpiresAt:null,testedAt:null,confirmedAt:null,externalId:null,credentials:mocked.current.credentials,inboxToken:'private-inbox',lastSyncedAt:null,lastError:null,createdAt:new Date(),updatedAt:new Date()});
 
 beforeEach(()=>{
   vi.unstubAllGlobals();vi.clearAllMocks();mocked.cookie=undefined;mocked.marker.clear();

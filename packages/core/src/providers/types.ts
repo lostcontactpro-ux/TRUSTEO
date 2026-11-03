@@ -38,6 +38,14 @@ export const normalizedReviewSchema = z.object({
   reply: z.string().max(10000).optional(),
 });
 export type NormalizedReview = z.infer<typeof normalizedReviewSchema>;
+export const businessPreviewSchema=z.object({
+  platform:platformIdSchema,businessId:z.string().min(1).max(500),name:z.string().trim().min(1).max(500),
+  address:z.string().max(2000).nullable(),website:z.string().url().refine(isSafeSourceUrl).nullable(),
+  sourceUrl:z.string().url().refine(isSafeSourceUrl),rating:z.number().min(0).max(5).nullable(),reviewCount:z.number().int().nonnegative().nullable(),
+  reviews:z.array(normalizedReviewSchema).max(3),authMethod:z.enum(['oauth','apiKey']),managementVerified:z.boolean(),
+});
+export type BusinessPreview=z.infer<typeof businessPreviewSchema>;
+export type ProviderAuthMethod='oauth'|'apiKey';
 export interface ProviderCredentials {
   accessToken?: string;
   refreshToken?: string;
@@ -79,12 +87,16 @@ export interface ReviewProvider {
   connect(input?: ConnectInput): Promise<ConnectionResult>;
   fetchReviews(since?: Date): Promise<NormalizedReview[]>;
   reply(reviewId: string, text: string): Promise<ReplyResult>;
+  /** Read-only profile/sample lookup. Public-key reads do not establish management rights. */
+  previewBusiness?(): Promise<BusinessPreview>;
 }
 export type ProviderDefinition = {
   id: PlatformId;
   label: string;
   capabilities: ProviderCapabilities;
   modes: readonly ConnectionMode[];
+  /** API adapters default to OAuth when omitted; email/assisted have no API auth. */
+  authMethods?: readonly ProviderAuthMethod[];
   /** Source-link allowlist. Hosts only; no backend fetch is performed for these links. */
   allowedReviewHosts: readonly string[];
   create: (config: ProviderConfig) => ReviewProvider;

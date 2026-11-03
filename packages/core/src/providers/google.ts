@@ -1,6 +1,7 @@
 import { encodePath, requireValue, validReply } from './http';
 import { OAuthProvider } from './oauth';
-import { normalizedReviewSchema, ProviderError, type ConnectInput, type ConnectionResult, type NormalizedReview, type ProviderConfig, type ProviderDefinition, type ReplyResult, type ReviewProvider } from './types';
+import { finiteRating,parseBusinessPreview,reviewCount,safeProfileUrl } from './preview';
+import { normalizedReviewSchema, ProviderError, type BusinessPreview, type ConnectInput, type ConnectionResult, type NormalizedReview, type ProviderConfig, type ProviderDefinition, type ReplyResult, type ReviewProvider } from './types';
 
 type GoogleReview = {
   reviewId: string; reviewer?: { displayName?: string }; starRating: string;
@@ -52,6 +53,40 @@ export class GoogleProvider extends OAuthProvider implements ReviewProvider {
   private locationPath() {
     return `accounts/${encodePath(requireValue(this.credentials.accountId, 'Google accountId'))}/locations/${encodePath(requireValue(this.credentials.remoteLocationId, 'Google remoteLocationId'))}`;
   }
+  private normalizeReview(review:GoogleReview):NormalizedReview {
+    const parsed=normalizedReviewSchema.safeParse({
+      externalId:review.reviewId,platform:this.id,locationId:this.config.locationId,
+      author:review.reviewer?.displayName||'Google user',rating:ratings[review.starRating],
+      text:review.comment??'',language:'und',publishedAt:new Date(review.createTime),
+      responseStatus:review.reviewReply?.comment?'replied':'pending',
+      sourceUrl:`https://business.google.com/reviews?reviewId=${encodePath(review.reviewId)}`,reply:review.reviewReply?.comment,
+    });
+    if(!parsed.success)throw new ProviderError('Google returned invalid review fields.','upstream');
+    return parsed.data;
+  }
+  async previewBusiness():Promise<BusinessPreview> {
+    // IDs or an API key alone never authorize Google Business Profile access.
+    if(this.credentials.apiKey)throw new ProviderError('Google Business Profile requires OAuth; API keys are not supported.','unsupported');
+    const path=this.locationPath();
+    const locationId=requireValue(this.credentials.remoteLocationId,'Google remoteLocationId');
+    const businessUrl=new URL(`https://mybusinessbusinessinformation.googleapis.com/v1/locations/${encodePath(locationId)}`);
+    businessUrl.search=new URLSearchParams({readMask:'name,title,storefrontAddress,websiteUri,metadata'}).toString();
+    const business=await this.authorized<{name?:string;title?:string;websiteUri?:string;storefrontAddress?:{addressLines?:string[];postalCode?:string;locality?:string;administrativeArea?:string;regionCode?:string};metadata?:{mapsUri?:string}}>(businessUrl.toString());
+    if(business.name&&business.name!==`locations/${locationId}`)throw new ProviderError('Google returned a different business location.','upstream');
+    const reviewsUrl=new URL(`https://mybusiness.googleapis.com/v4/${path}/reviews`);
+    reviewsUrl.search=new URLSearchParams({pageSize:'3',orderBy:'updateTime desc'}).toString();
+    const sample=await this.authorized<{reviews?:GoogleReview[];averageRating?:number;totalReviewCount?:number}>(reviewsUrl.toString());
+    if(sample.reviews!==undefined&&!Array.isArray(sample.reviews))throw new ProviderError('Google returned an invalid reviews collection.','upstream');
+    const publicUrl=safeProfileUrl(business.metadata?.mapsUri);
+    const sourceUrl=publicUrl&&['google.com','google.fr'].some(host=>new URL(publicUrl).hostname===host||new URL(publicUrl).hostname.endsWith(`.${host}`))?publicUrl:`https://business.google.com/locations/${encodePath(locationId)}`;
+    const address=business.storefrontAddress;
+    return parseBusinessPreview({
+      platform:this.id,businessId:locationId,name:business.title,
+      address:address?[...(address.addressLines??[]),address.postalCode,address.locality,address.administrativeArea,address.regionCode].filter(Boolean).join(', ')||null:null,
+      website:safeProfileUrl(business.websiteUri),sourceUrl,rating:finiteRating(sample.averageRating),reviewCount:reviewCount(sample.totalReviewCount),
+      reviews:(sample.reviews??[]).slice(0,3).map(review=>this.normalizeReview(review)),authMethod:'oauth',managementVerified:true,
+    },[this.credentials.accessToken,this.credentials.refreshToken,this.credentials.apiKey,this.config.oauth?.clientSecret]);
+  }
   async fetchReviews(since?: Date): Promise<NormalizedReview[]> {
     const result = new Map<string, NormalizedReview>();
     const seenPages = new Set<string>();
@@ -66,14 +101,7 @@ export class GoogleProvider extends OAuthProvider implements ReviewProvider {
         if (Number.isNaN(changedAt.getTime())) throw new ProviderError('Google returned an invalid review date.', 'upstream');
         if (since && changedAt < since) continue;
         newer = true;
-        const normalized = normalizedReviewSchema.parse({
-          externalId: review.reviewId, platform: this.id, locationId: this.config.locationId,
-          author: review.reviewer?.displayName || 'Google user', rating: ratings[review.starRating],
-          text: review.comment ?? '', language: 'und', publishedAt: new Date(review.createTime),
-          responseStatus: review.reviewReply?.comment ? 'replied' : 'pending',
-          sourceUrl: `https://business.google.com/reviews?reviewId=${encodePath(review.reviewId)}`,
-          reply: review.reviewReply?.comment,
-        });
+        const normalized=this.normalizeReview(review);
         result.set(normalized.externalId, normalized);
       }
       if (!data.nextPageToken || (since && !newer)) return [...result.values()];
@@ -94,6 +122,7 @@ export class GoogleProvider extends OAuthProvider implements ReviewProvider {
 export const definition: ProviderDefinition = {
   id: 'google', label: 'Google Business Profile',
   capabilities: { canRead: true, canReply: true, realtime: false, requiresPartnership: true },
+  authMethods:['oauth'],
   allowedReviewHosts: ['google.com','google.fr','g.page'],
   modes: ['api', 'email', 'assisted'], create: (config: ProviderConfig) => new GoogleProvider(config),
 };
