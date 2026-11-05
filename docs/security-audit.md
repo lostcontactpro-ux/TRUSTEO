@@ -56,3 +56,9 @@ Le SDK Stripe installé définit un coupon `repeating` par une durée en mois ca
 ## Résultats locaux finaux
 
 95 tests métier/sécurité, 6 tests du webhook et 8 parcours Chromium à 375 px passent. L’audit npm du lockfile final ne signale aucune vulnérabilité connue. Le verrou PostgreSQL de renouvellement OAuth et la relecture des jetons sérialisent les refresh entre web et worker. Les scores Lighthouse et le périmètre exact sont consignés dans [validation.md](validation.md).
+
+## Complément paiements directs — 5 novembre 2026
+
+Le complément ajoute des preuves de rattachement envoyées à l’email du paiement, une consommation unique avec contrôle de concurrence, le registre HMAC email/carte des essais, l’annulation du renouvellement côté Stripe et les exports CSV annuels avec protection des formules. Les événements reçus avant création du compte sont conservés. L’annulation d’un essai invalide ne produit pas de facture ; un changement d’identité sur un essai existant exige un rapprochement plutôt qu’une annulation automatique. L’email de rattachement constitue une preuve spécifique au paiement ; l’inscription générale n’a pas acquis une vérification universelle d’email.
+
+Validation mise à jour : 323 tests unitaires, 9 tests de signature et 16 scénarios mobiles validés, build et smoke PostgreSQL de production réussis. Voir [le rapport détaillé](validation-paiements-2026-11-05.md), qui distingue les tests locaux des opérations Stripe et Lovable réelles non effectuées.

@@ -2,7 +2,7 @@
 
 Site public : https://trus-teo.lovable.app.
 
-Ce guide concerne la liaison du site existant au serveur Next.js de ce dépôt. Une URL publique Lovable ne donne pas d'accès en écriture au projet. Les boutons ne peuvent être reliés définitivement qu'après obtention d'une véritable adresse HTTPS de l'application.
+Ce guide concerne la liaison du site existant au serveur Next.js de ce dépôt. Une URL publique Lovable ne donne pas d’accès en écriture au projet. Les quatre boutons de tarifs utilisent désormais les Payment Links directs : voir [le texte Lovable](lovable-paiements-prompt.md). Les liens de compte et le traitement sécurisé des abonnements nécessitent toujours un serveur déployé.
 
 ## 1. Héberger l'application
 
@@ -42,7 +42,7 @@ Avec la véritable adresse déployée de l'application :
 npm run lovable:links -- "$TRUSTEO_DEPLOYED_ORIGIN"
 ```
 
-`TRUSTEO_DEPLOYED_ORIGIN` désigne ici la variable contenant cette adresse, pas une URL à inventer. Le script ne lit aucun secret et ne déploie rien. Il produit les destinations d'inscription, connexion, quatre tarifs et devis, puis une consigne prête à coller dans Lovable. Le mode `--json` donne le même contenu structuré. La validation est syntaxique ; elle ne prouve pas la disponibilité du serveur.
+`TRUSTEO_DEPLOYED_ORIGIN` désigne ici la variable contenant cette adresse, pas une URL à inventer. Le script ne lit aucun secret et ne déploie rien. Il produit les destinations d’inscription, connexion et devis vers l’application, les quatre tarifs vers Stripe, puis une consigne prête à coller dans Lovable. Le mode `--json` donne le même contenu structuré. La validation est syntaxique ; elle ne prouve pas la disponibilité du serveur. Pour générer uniquement les tarifs et le texte sans URL d’application : `npm run lovable:links -- --payments-only`.
 
 L'opérateur peut appliquer cette consigne dans son projet Lovable. Pour modifier directement le code du site, fournir le lien du **dépôt GitHub relié au projet Lovable** et l'accès correspondant ; il peut être différent du dépôt de cette application.
 
@@ -51,8 +51,8 @@ L'opérateur peut appliquer cette consigne dans son projet Lovable. Pour modifie
 Depuis https://trus-teo.lovable.app, tester les boutons du menu, de l'accueil et des tarifs, sur mobile :
 
 - Essayer → inscription sur l'application ; Connexion → connexion sur l'application.
-- Essentiel/Pro et mensuel/annuel conservent les paramètres `plan` et `interval`.
-- Les formulaires de compte et Stripe restent sur l'application, sans iframe ni appels authentifiés interdomaines depuis Lovable.
+- Essentiel/Pro et mensuel/annuel ouvrent les quatre Payment Links exacts ; l’annuel annonce le paiement immédiat sans essai.
+- Les formulaires de compte restent sur l’application, le paiement sur Stripe, sans iframe ni appels authentifiés interdomaines depuis Lovable.
 - Un abonnement confirmé par webhook ouvre les fonctionnalités ; une simple redirection de paiement ne suffit pas.
 
 La liaison n'est terminée qu'après ces vérifications sur les vrais domaines. La présence des fichiers dans GitHub ou une configuration Vercel prête ne constitue pas une publication du site ni une modification de ses boutons.

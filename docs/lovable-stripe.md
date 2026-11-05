@@ -11,7 +11,7 @@ Le projet livré dans ce dépôt est une application Next.js avec routes serveur
 - **Stripe** encaisse les abonnements des utilisateurs de Trusteo sur le compte Stripe de l'exploitant. Les restaurateurs ne connectent pas leur propre compte Stripe pour payer leur abonnement. Ce flux ne nécessite pas Stripe Connect.
 - PostgreSQL, Redis et le worker restent ceux de l'application. Un simple lien depuis Lovable ne remplace pas ces services.
 
-Conserver les formulaires d'inscription, de connexion et de paiement dans l'application. Les boutons Lovable font une navigation vers elle ; ne pas envoyer des requêtes authentifiées interdomaines ni supprimer les protections CSRF pour relier les sites.
+Conserver les formulaires de compte dans l’application. Les boutons tarifaires ouvrent directement les quatre Payment Links Stripe ; le paiement est ensuite rattaché au compte par une preuve envoyée à son email. Les liens de compte ouvrent l’application : ne pas envoyer de requêtes authentifiées interdomaines ni supprimer les protections CSRF. Guide actuel : [paiements-directs.md](paiements-directs.md), avec [texte prêt à coller dans Lovable](lovable-paiements-prompt.md).
 
 Si l'objectif est d'héberger toute l'application dans le projet Lovable existant, inspecter d'abord son code et ses capacités d'exécution, puis préparer une adaptation dédiée. Ne pas présenter le monorepo Next.js comme déjà importé dans Lovable.
 
@@ -35,11 +35,12 @@ Les quatre IDs `price_…` peuvent être transmis pour configuration. Un ID de p
    - `customer.subscription.updated`
    - `customer.subscription.deleted`
    - `checkout.session.completed`
+   - `checkout.session.async_payment_succeeded`
    - `checkout.session.expired`
 5. Activer le Customer Portal pour les moyens de paiement, factures et annulations. Vérifier les contraintes de changement de formule décrites dans le README.
 6. Tester inscription → Stripe Checkout → carte de test → webhook → essai actif → espace client. Les IDs et une redirection de succès ne suffisent pas : l'accès est accordé par le webhook signé. Le passage en mode réel nécessite les clés et prix du mode réel, puis une validation distincte.
 
-L'application impose la carte, un essai initial de 14 jours et la remise d'introduction de 20 % pour deux mensualités. Le code peut créer le coupon attendu si la clé Stripe le permet ; sinon configurer `STRIPE_INTRO_COUPON_ID` avec un coupon compatible. Les forfaits annuels ont leur tarif propre.
+L’application impose la carte. Seuls les nouveaux clients mensuels admissibles bénéficient de 14 jours d’essai et de 20 % sur deux mensualités ; le registre anti-abus contrôle email et carte. L’annuel est payé immédiatement, sans essai ni cumul avec le coupon. Le code crée le coupon attendu si la clé Stripe le permet ; sinon configurer `STRIPE_INTRO_COUPON_ID`. Les réglages distants des Payment Links doivent être vérifiés séparément : `npm run stripe:links -- --check`, puis `--apply` après préparation du serveur et des emails.
 
 ## Relier les boutons dans Lovable
 
@@ -49,15 +50,15 @@ Une fois l'application réellement déployée, remplacer `URL_APPLICATION` par s
 | --- | --- |
 | Essayer / Commencer | `URL_APPLICATION/signup` |
 | Connexion / Mon espace | `URL_APPLICATION/login` |
-| Essentiel mensuel | `URL_APPLICATION/signup?plan=essential&interval=month` |
-| Essentiel annuel | `URL_APPLICATION/signup?plan=essential&interval=year` |
-| Pro mensuel | `URL_APPLICATION/signup?plan=pro&interval=month` |
-| Pro annuel | `URL_APPLICATION/signup?plan=pro&interval=year` |
+| Essentiel mensuel | https://buy.stripe.com/14A3cv2Fn5Up4ssg3Zes004 |
+| Essentiel annuel | https://buy.stripe.com/eVqfZh4Nv1E95ww3hdes002 |
+| Pro mensuel | https://buy.stripe.com/14AdR9gwdfuZbUU8Bxes003 |
+| Pro annuel | https://buy.stripe.com/6oUbJ193L4Qlf765ples001 |
 | Entreprise sur devis | `URL_APPLICATION/contact` |
 
 Consigne à fournir à Lovable après remplacement de ce repère :
 
-> Conserve mon site public et son design. Relie les boutons Essayer et Commencer à URL_APPLICATION/signup, Connexion et Mon espace à URL_APPLICATION/login, et chaque formule à sa destination avec les paramètres plan et interval ci-dessus. Il s'agit de liens vers mon application existante. Ne crée pas un deuxième système d'authentification ou de facturation, et n'ajoute aucune clé secrète Stripe dans le navigateur.
+> Conserve mon site public et son design. Relie les quatre formules aux Payment Links Stripe exacts du tableau. L’annuel est sans essai et payé en une fois. Relie les liens de compte à l’application existante. Ne crée pas un deuxième système d’authentification ou de facturation et n’ajoute aucune clé secrète Stripe dans le navigateur.
 
 Configurer `APP_URL` sur le serveur avec **l'origine de l'application**, puis les callbacks Google/Trustpilot vers `URL_APPLICATION/api/connections/oauth/callback`. Ne pas utiliser l'URL Lovable pour les webhooks et callbacks de ce dépôt tant que ces routes serveur n'y sont pas effectivement hébergées.
 

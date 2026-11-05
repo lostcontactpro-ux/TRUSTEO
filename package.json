@@ -24,6 +24,7 @@
     "predev": "npm run providers:generate",
     "prebuild": "npm run providers:generate",
     "lovable:links": "node scripts/lovable-links.mjs",
+    "stripe:links": "NODE_USE_ENV_PROXY=1 node --env-file-if-exists=.env scripts/stripe-payment-links.mjs",
     "db:migrate:deploy": "node scripts/migrate.mjs",
     "test:standalone": "node --env-file-if-exists=.env scripts/smoke-standalone.mjs"
   },

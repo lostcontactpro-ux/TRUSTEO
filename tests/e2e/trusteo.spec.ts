@@ -17,7 +17,7 @@ test('inscription mobile → essai fixture → connexion → réponse assistée 
   await expect(page.getByText('Un essai, sans surprise.')).toBeVisible();
   // The account is created through the real API; only external Checkout is isolated.
   await page.route('**/api/billing/checkout', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Paiement externe isolé pour ce test.' }) }));
-  await page.getByRole('button', { name: 'Démarrer mon essai sur Stripe' }).click();
+  await page.getByRole('button', { name: 'Continuer sur Stripe', exact: true }).click();
   await expect(page.getByRole('alert').filter({hasText:'Paiement externe isolé'})).toContainText('Paiement externe isolé');
   const user = await database.user.findUniqueOrThrow({ where: { email: person.email }, include: { subscription: true } });
   createdUserIds.push(user.id);
