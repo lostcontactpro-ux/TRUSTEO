@@ -50,3 +50,23 @@ export function stripePlanFromPrice(id: string): { plan: 'essential' | 'pro'; in
   }
   return null;
 }
+
+/** Apply the welcome discount only while the first eligible trial is running.
+ * Keep existing discount IDs to preserve their original expiry, and persist a
+ * Stripe-side marker so later deliveries never restart the two-month window. */
+export async function ensureIntroductoryDiscount(stripe: Stripe, subscription: Stripe.Subscription): Promise<void> {
+  if (subscription.status !== 'trialing' || subscription.metadata?.trusteo_intro_applied === 'v1') return;
+  const expanded = subscription.discounts?.some(discount => typeof discount === 'string')
+    ? await stripe.subscriptions.retrieve(subscription.id, { expand: ['discounts'] })
+    : subscription;
+  if (expanded.status !== 'trialing' || expanded.metadata?.trusteo_intro_applied === 'v1') return;
+  const coupon = await introductoryCoupon(stripe);
+  const discounts = expanded.discounts || [];
+  const present = discounts.some(discount => typeof discount === 'object' && (typeof discount.source.coupon === 'string' ? discount.source.coupon : discount.source.coupon?.id) === coupon);
+  const metadata = { ...expanded.metadata, trusteo_intro_applied: 'v1' };
+  if (present) {
+    await stripe.subscriptions.update(subscription.id, { metadata }, { idempotencyKey: `trusteo-intro-marker-${subscription.id}` });
+  } else {
+    await stripe.subscriptions.update(subscription.id, { metadata, discounts: [...discounts.map(discount => ({ discount: typeof discount === 'string' ? discount : discount.id })), { coupon }] }, { idempotencyKey: `trusteo-intro-apply-${subscription.id}` });
+  }
+}

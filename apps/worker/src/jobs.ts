@@ -31,8 +31,31 @@ async function sendEmail(input: { to: string; subject: string; text: string; key
   if (error) throw new Error('email_delivery_failed');
 }
 
+/** Bounded cleanup runs independently of new signups. Recheck expiration when
+ * mutating so a concurrently renewed/claimed payment receipt stays intact. */
+export async function purgeExpiredSensitiveData(now = new Date()) {
+  const expiredTrials = await db.trialUsage.findMany({
+    where: { expiresAt: { lte: now } }, select: { id: true }, orderBy: { expiresAt: 'asc' }, take: 500,
+  });
+  const trials = expiredTrials.length ? await db.trialUsage.deleteMany({
+    where: { id: { in: expiredTrials.map(row => row.id) }, expiresAt: { lte: now } },
+  }) : { count: 0 };
+  const expiredReceipts = await db.paymentReceipt.findMany({
+    where: { claimedAt: null, expiresAt: { lte: now }, tokenEnvelope: { not: null } },
+    select: { id: true }, orderBy: { expiresAt: 'asc' }, take: 500,
+  });
+  const receipts = expiredReceipts.length ? await db.paymentReceipt.updateMany({
+    where: { id: { in: expiredReceipts.map(row => row.id) }, claimedAt: null, expiresAt: { lte: now }, tokenEnvelope: { not: null } },
+    // Keep payment/customer/subscription references for reconciliation. Resending
+    // a claim link issues a fresh proof through the billing flow, never this job.
+    data: { tokenEnvelope: null },
+  }) : { count: 0 };
+  return { trialUsagesDeleted: trials.count, receiptEnvelopesCleared: receipts.count };
+}
+
 /** Repeatable dispatcher also recovers inserts committed before queue enqueue. */
 export async function dispatch() {
+  await purgeExpiredSensitiveData();
   const connections = await db.providerConnection.findMany({ where: { status: 'connected', mode: 'api', confirmedAt:{not:null} }, include: { location: { include: { user: { include: { subscription: true } } } } } });
   const bucket = Math.floor(Date.now() / 600_000);
   const capacity=new Map<string,boolean>();

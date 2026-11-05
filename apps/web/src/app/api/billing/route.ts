@@ -9,6 +9,7 @@ export async function GET() {
     return Response.json({ pricing, subscription: subscription ? {
       plan: subscription.plan, interval: subscription.interval, status: subscription.status,
       currentPeriodEnd: subscription.currentPeriodEnd, trialEndsAt: subscription.trialEndsAt,
+      cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
       locationLimit: locationLimit(subscription), hasBillingAccount: !!subscription.stripeCustomerId,
     } : null });
   } catch (error) { return apiError(error); }

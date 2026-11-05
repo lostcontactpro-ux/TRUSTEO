@@ -5,6 +5,7 @@ import { db } from '@/lib/db';
 import { apiError, guardMutation, HttpError, rateLimit, jsonBody } from '@/lib/security';
 import { appUrl, introductoryCoupon, priceId, stripeClient } from '@/lib/billing';
 import { amountFor, pricing } from '@trusteo/core/pricing';
+import { canOfferMonthlyTrial } from '@/lib/trial-eligibility';
 const input = z.object({ plan: z.enum(['essential', 'pro']), interval: z.enum(['month', 'year']) });
 
 export async function POST(request: Request) {
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
       throw new HttpError(503, 'Le tarif Stripe ne correspond pas aux tarifs Trusteo.');
     }
     let subscription = await db.subscription.upsert({ where: { userId: user.id }, create: { userId: user.id }, update: {} });
-    if ((subscription.stripeSubscriptionId && !['canceled', 'incomplete_expired'].includes(subscription.status)) || ['active', 'trialing', 'past_due', 'unpaid', 'paused'].includes(subscription.status)) throw new HttpError(409, 'Gérez votre abonnement existant depuis le portail client.');
+    if ((subscription.stripeSubscriptionId && !['canceled', 'incomplete_expired', 'trial_rejected', 'blocked_annual_trial', 'trial_unverifiable'].includes(subscription.status)) || ['active', 'trialing', 'past_due', 'unpaid', 'paused'].includes(subscription.status)) throw new HttpError(409, 'Gérez votre abonnement existant depuis le portail client.');
     if (subscription.checkoutSessionId) {
       if (subscription.checkoutSessionId.startsWith('pending:')) {
         if (!subscription.checkoutExpiresAt || subscription.checkoutExpiresAt > new Date()) throw new HttpError(409, 'Une page de paiement est déjà en cours de création. Réessayez dans quelques minutes.');
@@ -48,7 +49,7 @@ export async function POST(request: Request) {
     if (history.has_more || history.data.some(item => !['canceled', 'incomplete_expired'].includes(item.status))) {
       throw new HttpError(409, 'Un abonnement Stripe existe déjà ou nécessite une vérification. Utilisez le portail client plutôt qu’un nouveau paiement.');
     }
-    const trial = !subscription.trialUsed && history.data.length === 0;
+    const trial = interval === 'month' && !subscription.trialUsed && history.data.length === 0 && await canOfferMonthlyTrial({ email: user.email });
     const coupon = trial && interval === 'month' ? await introductoryCoupon(stripe) : undefined;
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription', customer: customerId, client_reference_id: user.id,

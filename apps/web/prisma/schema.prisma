@@ -68,6 +68,7 @@ model Subscription {
   checkoutSessionId     String?
   checkoutExpiresAt     DateTime?
   trialUsed             Boolean @default(false)
+  cancelAtPeriodEnd     Boolean @default(false)
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
   user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -281,4 +282,49 @@ model RateLimit {
   key     String   @id
   count   Int
   resetAt DateTime
+}
+
+// Durable association receipt. No foreign key: payment evidence must survive account deletion.
+model PaymentReceipt {
+  id                   String @id @default(cuid())
+  checkoutSessionId    String @unique
+  paymentLinkId        String
+  stripeCustomerId     String
+  stripeSubscriptionId String @unique
+  email                String
+  plan                 String
+  interval             String
+  tokenHash            String @unique
+  tokenEnvelope        String?
+  expiresAt            DateTime
+  emailedAt            DateTime?
+  claimedUserId        String?
+  claimedAt            DateTime?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  @@index([email, claimedAt])
+}
+
+// Retained even when the subscription event arrives before anonymous Checkout.
+model DeferredStripeEvent {
+  id                   String @id
+  type                 String
+  stripeSubscriptionId String
+  stripeCustomerId     String
+  checkoutSessionId    String?
+  eventCreated         Int
+  resolvedAt           DateTime?
+  receivedAt           DateTime @default(now())
+  @@index([stripeSubscriptionId, resolvedAt])
+}
+
+// Pseudonymous anti-trial evidence remains independent of User deletion.
+model TrialUsage {
+  id                   String @id @default(cuid())
+  stripeSubscriptionId String @unique
+  emailHash            String @unique
+  cardHash             String @unique
+  claimedAt            DateTime @default(now())
+  expiresAt            DateTime
+  @@index([expiresAt])
 }

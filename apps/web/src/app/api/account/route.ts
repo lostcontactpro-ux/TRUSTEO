@@ -13,7 +13,15 @@ const schema = z.object({
   currentPassword: z.string().min(1).max(72).optional(),
 }).strict();
 export async function GET() {
-  try { const user = await requireUser(); return Response.json({ user: publicUser(user), subscription: user.subscription }); }
+  try {
+    const user = await requireUser();
+    const subscription = user.subscription;
+    return Response.json({ user: publicUser(user), subscription: subscription ? {
+      plan: subscription.plan, interval: subscription.interval, status: subscription.status,
+      currentPeriodEnd: subscription.currentPeriodEnd, trialEndsAt: subscription.trialEndsAt,
+      cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+    } : null });
+  }
   catch (error) { return apiError(error); }
 }
 export async function PATCH(request: Request) {
@@ -44,6 +52,12 @@ export async function DELETE(request: Request) {
       if (subscription?.stripeSubscriptionId && !['canceled', 'incomplete_expired'].includes(subscription.status)) {
         throw new HttpError(409, 'Annulez votre abonnement dans le portail de facturation avant de supprimer le compte, afin d’arrêter les prélèvements.');
       }
+      // Payment references are retained for billing reconciliation, while the
+      // deleted account's clear email and claim envelope are removed. The
+      // independent, pseudonymized trial registry must survive re-registration.
+      await tx.paymentReceipt.updateMany({ where: { claimedUserId: user.id }, data: {
+        email: '', claimedUserId: null, tokenEnvelope: null,
+      } });
       await tx.user.delete({ where: { id: user.id } });
     });
     // Cascading deletion already revoked every session. Clear the browser cookie

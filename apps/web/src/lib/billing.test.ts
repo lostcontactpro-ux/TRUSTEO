@@ -38,3 +38,27 @@ describe('Stripe billing configuration', () => {
     expect(create).not.toHaveBeenCalled();
   });
 });
+
+describe('welcome discount application', () => {
+  it('never touches a paid active contract or restarts a marked trial discount', async () => {
+    const { ensureIntroductoryDiscount } = await import('./billing');
+    const update = vi.fn(); const stripe = { subscriptions: { update } } as unknown as Stripe;
+    await ensureIntroductoryDiscount(stripe, { status: 'active' } as Stripe.Subscription);
+    await ensureIntroductoryDiscount(stripe, { status: 'trialing', metadata: { trusteo_intro_applied: 'v1' } } as unknown as Stripe.Subscription);
+    expect(update).not.toHaveBeenCalled();
+  });
+  it('marks an already present coupon without replacing its original discount duration', async () => {
+    const { ensureIntroductoryDiscount } = await import('./billing');
+    const update = vi.fn().mockResolvedValue({});
+    const stripe = { coupons: { retrieve: vi.fn().mockResolvedValue({ id: 'trusteo_intro_20_2_months_v1', valid: true, percent_off: 20, duration: 'repeating', duration_in_months: 2 }) }, subscriptions: { update } } as unknown as Stripe;
+    await ensureIntroductoryDiscount(stripe, { id: 'sub_present', status: 'trialing', metadata: {}, discounts: [{ id: 'di_existing', source: { coupon: 'trusteo_intro_20_2_months_v1' } }] } as unknown as Stripe.Subscription);
+    expect(update).toHaveBeenCalledWith('sub_present', { metadata: { trusteo_intro_applied: 'v1' } }, { idempotencyKey: 'trusteo-intro-marker-sub_present' });
+  });
+  it('adds the welcome coupon with an idempotency key while retaining other discount IDs', async () => {
+    const { ensureIntroductoryDiscount } = await import('./billing');
+    const update = vi.fn().mockResolvedValue({});
+    const stripe = { coupons: { retrieve: vi.fn().mockResolvedValue({ id: 'trusteo_intro_20_2_months_v1', valid: true, percent_off: 20, duration: 'repeating', duration_in_months: 2 }) }, subscriptions: { update } } as unknown as Stripe;
+    await ensureIntroductoryDiscount(stripe, { id: 'sub_new', status: 'trialing', metadata: {}, discounts: [{ id: 'di_other', source: { coupon: 'other_coupon' } }] } as unknown as Stripe.Subscription);
+    expect(update).toHaveBeenCalledWith('sub_new', { metadata: { trusteo_intro_applied: 'v1' }, discounts: [{ discount: 'di_other' }, { coupon: 'trusteo_intro_20_2_months_v1' }] }, { idempotencyKey: 'trusteo-intro-apply-sub_new' });
+  });
+});
