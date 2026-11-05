@@ -10,9 +10,43 @@ export const pricing = {
 
 export type Plan = 'essential' | 'pro' | 'enterprise';
 export type BillingInterval = 'month' | 'year';
+export type SelfServePlan = Exclude<Plan, 'enterprise'>;
+
+/** Public Stripe Payment Links supplied by the merchant; never secret keys. */
+export const paymentLinks = {
+  essential: {
+    month: 'https://buy.stripe.com/14A3cv2Fn5Up4ssg3Zes004',
+    year: 'https://buy.stripe.com/eVqfZh4Nv1E95ww3hdes002',
+  },
+  pro: {
+    month: 'https://buy.stripe.com/14AdR9gwdfuZbUU8Bxes003',
+    year: 'https://buy.stripe.com/6oUbJ193L4Qlf765ples001',
+  },
+} as const;
+
+export function paymentLinkFor(plan: SelfServePlan, interval: BillingInterval): string {
+  return paymentLinks[plan][interval];
+}
+
+/** Comparison against twelve full-price monthly payments, before introductory
+ * discounts. The monthly equivalent is indicative; the annual total is charged. */
+export function annualSavings(plan: SelfServePlan) {
+  const fullPriceMonthlyTotalCents = pricing[plan].monthly * 12;
+  const annualPriceCents = pricing[plan].yearly;
+  const savingsCents = fullPriceMonthlyTotalCents - annualPriceCents;
+  return {
+    fullPriceMonthlyTotalCents,
+    annualPriceCents,
+    savingsCents,
+    percent: Math.round(savingsCents / fullPriceMonthlyTotalCents * 1000) / 10,
+    monthlyEquivalentCents: Math.round(annualPriceCents / 12),
+  };
+}
+
 export type Entitlement = {
   plan: string;
   status: string;
+  interval?: string;
   currentPeriodEnd?: Date | null;
   trialEndsAt?: Date | null;
   enterpriseLocationLimit?: number | null;
@@ -35,6 +69,12 @@ export function isEntitled(subscription: Entitlement | null | undefined, now = n
   if (subscription.status === 'trialing') return !!subscription.trialEndsAt && subscription.trialEndsAt > now;
   if (subscription.status === 'active') return !!subscription.currentPeriodEnd && subscription.currentPeriodEnd > now;
   return false;
+}
+
+/** Annual extras start with paid annual access. Scheduling cancellation does
+ * not remove them before the paid-through date. Annual trials grant no extras. */
+export function hasAnnualBenefits(subscription: Entitlement | null | undefined, now = new Date()): boolean {
+  return !!subscription && subscription.interval === 'year' && subscription.status === 'active' && isEntitled(subscription, now);
 }
 
 export function locationLimit(subscription: Entitlement | null | undefined, now = new Date()): number {

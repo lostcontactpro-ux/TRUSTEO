@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { amountFor, assertLocationCapacity, canAddLocation, canOperateLocations, isEntitled, locationLimit, pricing } from './pricing';
+import { amountFor, annualSavings, hasAnnualBenefits, paymentLinkFor, paymentLinks, assertLocationCapacity, canAddLocation, canOperateLocations, isEntitled, locationLimit, pricing } from './pricing';
 const now = new Date('2026-01-01T00:00:00Z');
 const active = { plan: 'essential', status: 'active', currentPeriodEnd: new Date('2026-02-01') };
 describe('pricing and server entitlements', () => {
@@ -44,5 +44,31 @@ describe('pricing and server entitlements', () => {
     expect(locationLimit({ ...active, plan: 'enterprise', enterpriseLocationLimit: 80 }, now)).toBe(80);
     expect(canAddLocation(active, -1, now)).toBe(false);
     expect(canAddLocation(active, 1.1, now)).toBe(false);
+  });
+});
+
+
+describe('annual pricing and direct Stripe links', () => {
+  it('routes each plan and cadence to its exact public Payment Link', () => {
+    expect(paymentLinkFor('essential', 'month')).toBe('https://buy.stripe.com/14A3cv2Fn5Up4ssg3Zes004');
+    expect(paymentLinkFor('essential', 'year')).toBe('https://buy.stripe.com/eVqfZh4Nv1E95ww3hdes002');
+    expect(paymentLinkFor('pro', 'month')).toBe('https://buy.stripe.com/14AdR9gwdfuZbUU8Bxes003');
+    expect(paymentLinkFor('pro', 'year')).toBe('https://buy.stripe.com/6oUbJ193L4Qlf765ples001');
+    expect(new Set(Object.values(paymentLinks).flatMap(cadences => Object.values(cadences))).size).toBe(4);
+  });
+  it('calculates savings against twelve full-price months without stacking the introductory discount', () => {
+    expect(annualSavings('essential')).toEqual({fullPriceMonthlyTotalCents:59760,annualPriceCents:40900,savingsCents:18860,percent:31.6,monthlyEquivalentCents:3408});
+    expect(annualSavings('pro')).toEqual({fullPriceMonthlyTotalCents:130800,annualPriceCents:98000,savingsCents:32800,percent:25.1,monthlyEquivalentCents:8167});
+  });
+  it('keeps annual extras only for paid, nonexpired annual access', () => {
+    const annual={...active,interval:'year',cancelAtPeriodEnd:true};
+    expect(hasAnnualBenefits(annual,now)).toBe(true);
+    expect(hasAnnualBenefits({...annual,interval:'month'},now)).toBe(false);
+    expect(hasAnnualBenefits({...annual,currentPeriodEnd:now},now)).toBe(false);
+    expect(hasAnnualBenefits({...annual,currentPeriodEnd:null},now)).toBe(false);
+    expect(hasAnnualBenefits({...annual,status:'trialing',trialEndsAt:new Date('2026-01-15')},now)).toBe(false);
+    for(const status of ['past_due','canceled','incomplete','unpaid','paused'])expect(hasAnnualBenefits({...annual,status},now)).toBe(false);
+    expect(hasAnnualBenefits(null,now)).toBe(false);
+    expect(hasAnnualBenefits(undefined,now)).toBe(false);
   });
 });

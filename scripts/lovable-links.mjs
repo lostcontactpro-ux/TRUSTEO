@@ -1,19 +1,20 @@
 #!/usr/bin/env node
-import { buildLovableIntegration } from '../packages/core/src/integration-links.ts';
+import { buildLovableIntegration, buildLovablePaymentIntegration } from '../packages/core/src/integration-links.ts';
 
-const usage = 'Usage : node scripts/lovable-links.mjs <origine HTTPS publique réelle de l’application Next.js> [--json]';
+const usage = 'Usage : node scripts/lovable-links.mjs <origine HTTPS publique réelle de l’application Next.js> [--json]\n        node scripts/lovable-links.mjs --payments-only [--json]';
 const args = process.argv.slice(2);
 if (args.length === 1 && ['--help', '-h'].includes(args[0])) {
   process.stdout.write(`${usage}\n`);
 } else {
-  const positional = args.filter(value => value !== '--json');
+  const paymentsOnly = args.includes('--payments-only');
+  const positional = args.filter(value => value !== '--json' && value !== '--payments-only');
   const jsonOnly = args.includes('--json');
-  if (positional.length !== 1 || args.length !== positional.length + Number(jsonOnly) || positional[0].startsWith('--')) {
+  if (positional.length !== (paymentsOnly ? 0 : 1) || args.length !== positional.length + Number(jsonOnly) + Number(paymentsOnly) || positional[0]?.startsWith('--')) {
     process.stderr.write(`${usage}\n`);
     process.exitCode = 2;
   } else {
     try {
-      const integration = buildLovableIntegration(positional[0]);
+      const integration = paymentsOnly ? buildLovablePaymentIntegration() : buildLovableIntegration(positional[0]);
       if (jsonOnly) process.stdout.write(`${JSON.stringify(integration, null, 2)}\n`);
       else {
         const { prompt, ...destinations } = integration;

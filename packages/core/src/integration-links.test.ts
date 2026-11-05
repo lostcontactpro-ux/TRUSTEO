@@ -1,38 +1,40 @@
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { buildLovableIntegration, LOVABLE_SITE_ORIGIN } from './integration-links';
+import { buildLovableIntegration, buildLovablePaymentIntegration, LOVABLE_SITE_ORIGIN } from './integration-links';
+import { paymentLinkFor } from './pricing';
 
 // Syntactic unit fixture only: this address is never probed or claimed deployed.
 const appOrigin = 'https://console.unit-fixture.fr';
 const script = fileURLToPath(new URL('../../../scripts/lovable-links.mjs', import.meta.url));
 
 describe('Lovable navigation integration', () => {
-  it('maps signup, login, four pricing choices and enterprise to existing application routes', () => {
+  it('maps account routes to the application and all pricing choices directly to Stripe', () => {
     const result = buildLovableIntegration(appOrigin);
     expect(result.siteOrigin).toBe('https://trus-teo.lovable.app');
     expect(result.appOrigin).toBe(appOrigin);
     expect(result.links).toEqual({
       signup: `${appOrigin}/signup`, login: `${appOrigin}/login`,
-      essentialMonth: `${appOrigin}/signup?plan=essential&interval=month`,
-      essentialYear: `${appOrigin}/signup?plan=essential&interval=year`,
-      proMonth: `${appOrigin}/signup?plan=pro&interval=month`,
-      proYear: `${appOrigin}/signup?plan=pro&interval=year`,
+      essentialMonth: paymentLinkFor('essential','month'),
+      essentialYear: paymentLinkFor('essential','year'),
+      proMonth: paymentLinkFor('pro','month'),
+      proYear: paymentLinkFor('pro','year'),
       enterprise: `${appOrigin}/contact`,
     });
     for (const [key, value] of Object.entries(result.links)) {
       const url = new URL(value);
-      expect(url.origin).toBe(appOrigin);
-      expect(url.pathname).toBe(key === 'login' ? '/login' : key === 'enterprise' ? '/contact' : '/signup');
+      const isAccountLink=['signup','login','enterprise'].includes(key);
+      expect(url.origin).toBe(isAccountLink?appOrigin:'https://buy.stripe.com');
+      if(isAccountLink) expect(url.pathname).toBe(key === 'login' ? '/login' : key === 'enterprise' ? '/contact' : '/signup');
     }
   });
-  it('preserves exact plan and interval parameters for every pricing button', () => {
+  it('preserves the merchant-provided payment destination for every plan and interval', () => {
     const { links } = buildLovableIntegration(appOrigin);
     for (const [name, plan, interval] of [
       ['essentialMonth', 'essential', 'month'], ['essentialYear', 'essential', 'year'],
       ['proMonth', 'pro', 'month'], ['proYear', 'pro', 'year'],
     ] as const) {
-      expect([...new URL(links[name]).searchParams]).toEqual([['plan', plan], ['interval', interval]]);
+      expect(links[name]).toBe(paymentLinkFor(plan,interval));
     }
   });
   it('canonicalizes an optional root slash and the standard HTTPS port', () => {
@@ -80,7 +82,7 @@ describe('Lovable navigation integration', () => {
     const command = spawnSync(process.execPath, [script, appOrigin], { encoding: 'utf8' });
     expect(command.status, command.stderr).toBe(0);
     expect(command.stdout).toContain('Prompt à coller dans Lovable :');
-    expect(command.stdout).toContain(`${appOrigin}/signup?plan=pro&interval=year`);
+    expect(command.stdout).toContain(paymentLinkFor('pro','year'));
   });
   it('CLI rejects secret-bearing URL input without echoing the URL or secret', () => {
     const command = spawnSync(process.execPath, [script, 'https://user:private-value@console.unit-fixture.fr'], { encoding: 'utf8' });
@@ -92,5 +94,17 @@ describe('Lovable navigation integration', () => {
   it.each([[], [appOrigin, 'unexpected'], ['--json', '--json', appOrigin], ['--unknown', appOrigin]].map(args=>({args})))('requires exactly one origin argument: $args', ({args}) => {
     const command = spawnSync(process.execPath, [script, ...args], { encoding: 'utf8' });
     expect(command.status).toBe(2); expect(command.stdout).toBe('');
+  });
+  it('generates a payments-only Lovable prompt without inventing a deployed application',()=>{
+    const integration=buildLovablePaymentIntegration();
+    const command=spawnSync(process.execPath,[script,'--payments-only','--json'],{encoding:'utf8'});
+    expect(command.status,command.stderr).toBe(0);
+    expect(JSON.parse(command.stdout)).toEqual(integration);
+    expect(integration.prompt).toContain('Sans essai gratuit');
+    expect(integration.prompt).toContain('188,60');
+    expect(integration.prompt).toContain('328');
+    expect(integration.prompt).toContain('hors remise de bienvenue');
+    expect(integration.prompt).toContain('un seul essai par client');
+    expect(integration.prompt).not.toContain('URL_APPLICATION');
   });
 });
